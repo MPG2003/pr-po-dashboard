@@ -3206,10 +3206,10 @@ ${vagRows || 'None.'}
     }
 
     function handleDownloadCommand(text) {
-      const match = text.match(/DOWNLOAD_CSV:\{"filename":"([^"]+)","type":"([^"]+)"\}/);
+      const match = text.match(/DOWNLOAD_CSV:\s*\{\s*"filename"\s*:\s*"([^"]+)"\s*,\s*"type"\s*:\s*"([^"]+)"\s*\}/);
       if (match) {
         const fname = match[1], type = match[2];
-        const cleanText = text.replace(/DOWNLOAD_CSV:\{[^\}]+\}/g, '').trim();
+        const cleanText = text.replace(/DOWNLOAD_CSV:\s*\{[^\}]+\}/g, '').trim();
         const dlBtn = `<button class="chat-dl-btn" onclick="downloadCSV('${type}','${fname}')">⬇ Download ${fname}</button>`;
         addMessage('ai', cleanText, dlBtn);
         return true;
