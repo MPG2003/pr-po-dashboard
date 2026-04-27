@@ -2698,10 +2698,13 @@
 
         const learnedCount = data.results.filter(r => r.learned).length;
         const total = data.results.length;
-        const pct = Math.round((learnedCount / total) * 100);
+        const pct = total === 0 ? 0 : Math.round((learnedCount / total) * 100);
+
+        // If there are zero mistakes to test, we show N/A instead of 0% to avoid confusion
+        const displayPct = total === 0 ? "—" : pct + "%";
 
         // Update learning rate KPI
-        document.getElementById('fb-learning-rate').textContent = pct + '%';
+        document.getElementById('fb-learning-rate').textContent = displayPct;
         document.getElementById('fb-learning-rate').style.color = pct >= 70 ? 'var(--green)' : pct >= 40 ? 'var(--yellow)' : 'var(--red)';
 
         // Update summary badge
@@ -3063,7 +3066,8 @@ EBAN(Purchase Requisitions): ${ebanTotal} total | ${ebanClean} clean | ${ebanVag
 EKPO(Purchase Orders)      : ${ekpoTotal} total | ${ekpoClean} clean | ${ekpoVague} vague | ${ekpoMisc} misclassified
 
 ML Model: TF - IDF + Logistic Regression | Accuracy: 91.2 %
-        Feedback improvement: 73.3 % → 86.7 % (+13.3 % from 10 corrections)
+        Feedback Impact: ${total > 0 ? total + ' real-time corrections applied' : 'No analyst feedback yet'}
+        Data Improvement: ${quality}% (Target 95%)
 
 ═══════════════════════════════════════
 MATERIAL GROUP BREAKDOWN(ALL ${total} RECORDS)
