@@ -387,11 +387,11 @@ def retrain_model():
                 
                 fb_df = fb_df[fb_df["MATERIAL_GROUP"].isin(MATERIAL_GROUPS.keys())]
                 if len(fb_df) > 0:
-                    fb_X = pd.concat([fb_df["DESCRIPTION"].str.lower()] * 20)
-                    fb_y = pd.concat([fb_df["MATERIAL_GROUP"]] * 20)
+                    fb_X = pd.concat([fb_df["DESCRIPTION"].str.lower()] * 500)
+                    fb_y = pd.concat([fb_df["MATERIAL_GROUP"]] * 500)
                     X_train = pd.concat([X_train_base, fb_X], ignore_index=True)
                     y_train = pd.concat([y_train_base, fb_y], ignore_index=True)
-                    print(f"  ✓ Added {len(fb_df)} feedback corrections (weighted 20x) to training only")
+                    print(f"  ✓ Added {len(fb_df)} feedback corrections (weighted 500x) to training only")
                 else:
                     X_train, y_train = X_train_base, y_train_base
             else:
