@@ -2735,12 +2735,16 @@
       document.getElementById('verify-table').style.display = 'none';
       try {
         const resp = await fetch('/api/verify-learning');
+        // Guard: if server returns HTML (error page) instead of JSON, fail gracefully
+        const contentType = resp.headers.get('content-type') || '';
+        if (!resp.ok || !contentType.includes('application/json')) {
+          throw new Error(`Server returned ${resp.status} — expected JSON, got ${contentType}`);
+        }
         const data = await resp.json();
         document.getElementById('verify-loading').style.display = 'none';
 
         if (!data.results || data.results.length === 0) {
           document.getElementById('verify-empty').style.display = 'block';
-          document.getElementById('fb-learning-rate').textContent = '—';
           return;
         }
 
@@ -2785,9 +2789,14 @@
       } catch (e) {
         console.error('Verify Tab Error:', e);
         document.getElementById('verify-loading').style.display = 'none';
-        document.getElementById('verify-empty').style.display = 'block';
-        const msg = (e.name === 'SyntaxError') ? 'Server returned invalid data' : 'Could not reach server — check Flask logs';
-        document.getElementById('verify-empty').querySelector('div:last-child').textContent = msg;
+        const emptyEl = document.getElementById('verify-empty');
+        if (emptyEl) {
+          emptyEl.style.display = 'block';
+          const msgEl = emptyEl.querySelector('div:last-child');
+          if (msgEl) {
+            msgEl.textContent = (e.name === 'SyntaxError') ? 'Analysis server returned invalid data.' : 'Could not reach analysis server. Please check your data or try again.';
+          }
+        }
       }
     }
 
@@ -2870,46 +2879,121 @@
     }
 
     // ── REVIEW ACTIONS ────────────────────────────────────────────────────
+    // ── REVIEW ACTIONS ────────────────────────────────────────────────────
     function acceptRow(idx) {
       if (!document.getElementById('rv' + idx)) return;
-      document.getElementById('rv' + idx).style.opacity = '0.5';
-      document.getElementById('rv' + idx).style.pointerEvents = 'none';
-      const r = allReview[reviewBatchStart + idx];
-      const sug = document.getElementById('rv-sug-' + idx).dataset.grp;
-      sendFeedback(r.TXZ01, sug, r.ORIG_MATGR || r.MATGR, 'accept');
+      const actualIndex = reviewBatchStart + idx;
+      const r = allReview[actualIndex];
+      if (!r) return;
+
+      const sugEl = document.getElementById('rv-sug-' + idx);
+      const sugGrp = sugEl ? sugEl.dataset.grp || r.MATGR : r.MATGR;
+
+      sendFeedback(r.TXZ01, sugGrp, r.ORIG_MATGR || r.MATGR, 'accept');
+      removeRowFromUI(idx);
     }
+
     function editRow(idx) {
       document.getElementById('rv-view-' + idx).style.display = 'none';
       document.getElementById('rv-edit-' + idx).style.display = 'block';
     }
+
     function cancelEdit(idx) {
       document.getElementById('rv-view-' + idx).style.display = 'flex';
       document.getElementById('rv-edit-' + idx).style.display = 'none';
     }
+
     function saveEdit(idx) {
       if (!document.getElementById('rv' + idx)) return;
-      document.getElementById('rv' + idx).style.opacity = '0.5';
-      document.getElementById('rv' + idx).style.pointerEvents = 'none';
-      const r = allReview[reviewBatchStart + idx];
+      const actualIndex = reviewBatchStart + idx;
+      const r = allReview[actualIndex];
+      if (!r) return;
+
       const newGrp = document.getElementById('rv-sel-' + idx).value;
       sendFeedback(r.TXZ01, newGrp, r.ORIG_MATGR || r.MATGR, 'edit');
+
+      // Update UI suggestion then remove after brief delay
+      const sugEl = document.getElementById('rv-sug-' + idx);
+      if (sugEl) sugEl.innerHTML = gTag(newGrp);
+
+      removeRowFromUI(idx);
     }
+
     function rejectRow(idx) {
       if (!document.getElementById('rv' + idx)) return;
-      document.getElementById('rv' + idx).style.opacity = '0.5';
-      document.getElementById('rv' + idx).style.pointerEvents = 'none';
-      const r = allReview[reviewBatchStart + idx];
-      sendFeedback(r.TXZ01, r.ORIG_MATGR || r.MATGR, r.ORIG_MATGR || r.MATGR, 'reject');
+      const actualIndex = reviewBatchStart + idx;
+      const r = allReview[actualIndex];
+      if (!r) return;
+
+      // BUG 4 FIX: When rejecting, correct_group = original SAP group (what it should stay as),
+      // wrong_group = what the AI suggested (ML_GROUP). This makes the reject meaningful in feedback.csv.
+      const aiSuggested = r.ML_GROUP || r.MATGR;
+      const originalGrp = r.ORIG_MATGR || r.MATGR;
+      sendFeedback(r.TXZ01, originalGrp, aiSuggested, 'reject');
+      removeRowFromUI(idx);
+      toast('✕ Item rejected — AI suggestion discarded', 'warn');
     }
+
+    function removeRowFromUI(idx) {
+      const actualIndex = reviewBatchStart + idx;
+      const rowEl = document.getElementById('rv' + idx);
+      if (rowEl) {
+        rowEl.style.opacity = '0.3';
+        rowEl.style.pointerEvents = 'none';
+        rowEl.style.transition = 'opacity .3s';
+
+        setTimeout(() => {
+          // BUG 1 FIX: Remove from the data array so indices stay correct
+          // and the item never reappears when the batch re-renders
+          allReview.splice(actualIndex, 1);
+          rowEl.remove(); // Remove from DOM entirely (not just hide)
+
+          // Update sidebar count from the authoritative source
+          document.getElementById('sb-review').textContent = allReview.length;
+
+          // If this batch is now empty and more records exist, auto-load next batch
+          const visibleRows = document.querySelectorAll('#review-body tr[id^=rv]').length;
+          if (visibleRows === 0 && reviewBatchStart < allReview.length) {
+            renderReviewBatch();
+          }
+
+          refreshFeedbackStats();
+        }, 400);
+      }
+    }
+
     function acceptAllReview() {
-      const batch = allReview.slice(reviewBatchStart, reviewBatchStart + REVIEW_BATCH_SIZE);
-      batch.forEach((r, i) => {
-        if (document.getElementById('rv' + i) && document.getElementById('rv' + i).style.opacity !== '0.5') {
-          acceptRow(i);
-        }
-      });
-      setTimeout(() => { if (reviewBatchStart + REVIEW_BATCH_SIZE < allReview.length) loadNextBatch(); }, 1200);
+      // BUG 2 FIX: Collect all row indices BEFORE any acceptRow call mutates the DOM.
+      // Previously, iterating with forEach index i caused desync as rows were removed.
+      const batchRows = [...document.querySelectorAll('#review-body tr[id^=rv]')]
+        .filter(row => row.style.display !== 'none' && row.style.opacity !== '0.3');
+
+      // Extract the numeric idx from the element id (e.g. "rv3" → 3) upfront
+      const indices = batchRows.map(row => parseInt(row.id.replace('rv', ''), 10));
+      const count = indices.length;
+
+      if (count === 0) return;
+
+      // Process in reverse order so splice() in removeRowFromUI doesn't shift
+      // the positions of items we haven't processed yet
+      indices.reverse().forEach(idx => acceptRow(idx));
+
+      if (count > 0) {
+        toast(`✓ Accepting ${count} records...`, 'ok');
+        setTimeout(() => {
+          if (reviewBatchStart < allReview.length) {
+            renderReviewBatch();
+          }
+        }, 1200);
+      }
     }
+
+    function updateReviewCount() {
+      // BUG 5 FIX: Use the authoritative data array length, not a DOM button count
+      const remaining = allReview ? allReview.length : 0;
+      document.getElementById('sb-review').textContent = remaining;
+    }
+
     // ── FEEDBACK API ─────────────────────────────────────────────────────
     async function sendFeedback(description, correctGroup, wrongGroup, action) {
       try {
@@ -2927,23 +3011,14 @@
         }
         updateCorrectionCounter(data.total_corrections);
 
-        // PERSISTENCE: Save to LocalStorage to protect work from Railway restarts
+        // PERSISTENCE: LocalStorage (Safety net)
         try {
           const localStore = JSON.parse(localStorage.getItem('analyst_corrections') || '{}');
           const dLow = description.toLowerCase().trim();
-          if (!localStore[dLow]) {
-            localStore[dLow] = { grp: correctGroup, count: 1 };
-          } else {
-            localStore[dLow].grp = correctGroup;
-            localStore[dLow].count += 1;
-          }
+          localStore[dLow] = { grp: correctGroup, count: (localStore[dLow]?.count || 0) + 1 };
           localStorage.setItem('analyst_corrections', JSON.stringify(localStore));
-        } catch (e) {
-          console.warn('LocalStorage error:', e);
-        }
-      } catch (e) {
-        console.warn('Feedback API error:', e);
-      }
+        } catch (e) { }
+      } catch (e) { console.warn('Feedback API error:', e); }
     }
 
     async function refreshAccuracy() {
@@ -2969,108 +3044,22 @@
       if (el) el.textContent = total + ' corrections submitted';
     }
 
-    function removeRow(i) {
-      const r = document.getElementById('rv' + i);
-      if (r) {
-        r.style.opacity = '.2';
-        r.style.transition = 'opacity .3s';
-        setTimeout(() => {
-          r.remove();
-          // Also remove from global array so it won't show up in Feedback tab count
-          const actualIndex = reviewBatchStart + i;
-          if (allReview[actualIndex]) {
-            allReview.splice(actualIndex, 1);
-            // If the row was accepted/removed, adjust batch offset if necessary (though usually we just re-render)
-          }
-          updateReviewCount();
-          // Important: Sync the Feedback stats box too
-          refreshFeedbackStats();
-        }, 300);
-      }
+    function toast(msg, type) {
+      const t = document.getElementById('toast');
+      if (!t) return;
+      t.textContent = msg;
+      t.className = 'toast ' + (type || '');
+      t.classList.add('show');
+      setTimeout(() => t.classList.remove('show'), 3000);
     }
-
-    function acceptRow(i) {
-      const row = allReview[i];
-      const sug = document.getElementById('rv-sug-' + i);
-      const sugGrp = sug ? sug.getAttribute('data-grp') || row?.MATGR : row?.MATGR;
-      if (row) sendFeedback(row.TXZ01 || '', sugGrp || row.MATGR, row.MATGR, 'accept');
-      removeRow(i);
-    }
-
-    function rejectRow(i) {
-      const row = allReview[i];
-      if (row) sendFeedback(row.TXZ01 || '', row.MATGR, row.MATGR, 'reject');
-      removeRow(i);
-      toast('✕ Sent back to requester', 'warn');
-    }
-
-    function editRow(i) { document.getElementById('rv-view-' + i).style.display = 'none'; document.getElementById('rv-edit-' + i).style.display = 'block'; }
-    function cancelEdit(i) { document.getElementById('rv-edit-' + i).style.display = 'none'; document.getElementById('rv-view-' + i).style.display = 'flex'; }
-
-    function saveEdit(i) {
-      const sel = document.getElementById('rv-sel-' + i);
-      const val = sel ? sel.value : '';
-      const row = allReview[i];
-      if (val && row) {
-        document.getElementById('rv-sug-' + i).innerHTML = gTag(val);
-        sendFeedback(row.TXZ01 || '', val, row.MATGR, 'edit');
-      }
-      document.getElementById('rv-edit-' + i).style.display = 'none';
-      document.getElementById('rv-view-' + i).style.display = 'flex';
-    }
-
-    function acceptAllReview() {
-      const batch = allReview.slice(reviewBatchStart, reviewBatchStart + REVIEW_BATCH_SIZE);
-      document.querySelectorAll('#review-body tr[id^=rv]').forEach(r => { r.style.opacity = '.15'; });
-      batch.forEach(row => {
-        if (row) sendFeedback(row.TXZ01 || '', row.MATGR, row.MATGR, 'accept');
-      });
-      reviewBatchStart += REVIEW_BATCH_SIZE;
-      setTimeout(() => {
-        if (reviewBatchStart < allReview.length) {
-          renderReviewBatch();
-          toast(`✓ Batch accepted! Loading next ${Math.min(REVIEW_BATCH_SIZE, allReview.length - reviewBatchStart)} records...`, 'ok');
-        } else {
-          document.getElementById('review-body').innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--green);padding:24px">✓ All ${allReview.length} records reviewed!</td></tr>';
-          document.getElementById('review-count').textContent = '0 remaining · Complete!';
-          document.getElementById('sb-review').textContent = '0';
-          toast('✅ All records reviewed! Model trained on your corrections.', 'ok');
-        }
-      }, 400);
-    }
-    function updateReviewCount() {
-      const remaining = allReview ? allReview.length : 0;
-      const batchNum = Math.floor(reviewBatchStart / REVIEW_BATCH_SIZE) + 1;
-      const totalBatches = Math.max(1, Math.ceil(remaining / REVIEW_BATCH_SIZE));
-
-      document.getElementById('review-count').textContent = `${remaining} remaining · Batch ${batchNum} of ${totalBatches}`;
-      document.getElementById('sb-review').textContent = remaining;
-
-      const fbRem = document.getElementById('fb-records-remaining');
-      if (fbRem) fbRem.textContent = remaining;
-
-      // Auto-load next batch if empty
-      const inBatch = document.querySelectorAll('#review-body tr[id^=rv]').length;
-      if (inBatch === 0 && reviewBatchStart + REVIEW_BATCH_SIZE < allReview.length) {
-        setTimeout(() => { loadNextBatch(); }, 600);
-      }
-    }
-
-    // ── TOAST ─────────────────────────────────────────────────────────────
-    function toast(msg, type) { const t = document.getElementById('toast'); t.textContent = msg; t.className = 'toast ' + (type || ''); t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 3000); }
 
     // ══════════════════════════════════════════════════════════════════════
-    // CHATBOX — Groq API (works when hosted online, no CORS issues)
-    // IMPORTANT: This works when the file is served from a web server.
-    // For local file usage, you'll get CORS errors (browser security).
-    // Host on Netlify, GitHub Pages, or Vercel for best results.
+    // CHATBOX — Groq API
     // ══════════════════════════════════════════════════════════════════════
-    let chatOpen = false, apiKey = '', chatHistory = [];
-    let cachedContext = ''; // Store compressed context, only rebuild when data changes
+    let chatOpen = false, chatHistory = [];
+    let cachedContext = '';
 
-    // Called after analysis to cache the context once
     function updateChatContext(total, clean, vague, misc, blank, quality, eban, ekpo, all) {
-      // Build dept stats from ALL records (not sliced)
       const deptStats = {};
       all.filter(r => r.issue === 'misclass' || r.issue === 'vague').forEach(r => {
         let d = r.AFNAM || r.LIFNR || 'Unknown';
@@ -3082,10 +3071,9 @@
       const deptLines = Object.entries(deptStats)
         .sort((a, b) => b[1].total - a[1].total)
         .slice(0, 15)
-        .map(([d, s]) => `${d}: ${s.misc} misclassified, ${s.vague} vague(total issues: ${s.total})`)
+        .map(([d, s]) => `${d}: ${s.misc} misclassified, ${s.vague} vague (total: ${s.total})`)
         .join('\n');
 
-      // Group breakdown — full counts
       const groupStats = {};
       GROUPS.forEach(g => {
         const grpAll = all.filter(r => r.MATGR === g);
@@ -3096,98 +3084,38 @@
           misc: grpAll.filter(r => r.issue === 'misclass').length,
         };
       });
-      const groupLines = Object.entries(groupStats)
-        .map(([g, s]) => `${g}(${GN[g]}): total = ${s.total} clean = ${s.clean} vague = ${s.vague} misclass = ${s.misc}`)
-        .join('\n');
+      const groupLines = Object.entries(groupStats).map(([g, s]) => `${g}: ${s.total} total, ${s.clean} clean, ${s.vague} vague, ${s.misc} misclass`).join('\n');
 
-      // Misclass patterns — full count
       const mPairs = {};
       allMisclass.forEach(r => { const k = `${r.MATGR}→${r.correct}`; mPairs[k] = (mPairs[k] || 0) + 1; });
-      const patternLines = Object.entries(mPairs)
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, 10)
-        .map(([p, c]) => `${p}: ${c} records`)
-        .join('\n');
+      const patternLines = Object.entries(mPairs).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([p, c]) => `${p}: ${c} records`).join('\n');
 
-      // Sample records for AI to reason about (top 50 each)
-      const misRows = allMisclass.slice(0, 50).map(r => `${r.src} | ${r.BANFN || r.EBELN} | ${r.TXZ01} | ${r.MATGR}→${r.correct} | ${r.AFNAM || r.LIFNR} | ${r.WERKS}`).join('\n');
-      const vagRows = allVague.slice(0, 50).map(r => `${r.src} | ${r.BANFN || r.EBELN} | ${r.TXZ01} | ${r.MATGR} | ${r.AFNAM || r.LIFNR} | ${r.WERKS}`).join('\n');
+      const misRows = allMisclass.slice(0, 50).map(r => `${r.src} | ${r.TXZ01} | ${r.MATGR}→${r.correct}`).join('\n');
+      const vagRows = allVague.slice(0, 50).map(r => `${r.src} | ${r.TXZ01} | ${r.MATGR}`).join('\n');
 
-      // EBAN vs EKPO split
-      const ebanTotal = eban.length, ekpoTotal = ekpo.length;
-      const ebanClean = eban.filter(r => r.issue === 'clean').length;
-      const ekpoClean = ekpo.filter(r => r.issue === 'clean').length;
-      const ebanVague = eban.filter(r => r.issue === 'vague').length;
-      const ekpoVague = ekpo.filter(r => r.issue === 'vague').length;
-      const ebanMisc = eban.filter(r => r.issue === 'misclass').length;
-      const ekpoMisc = ekpo.filter(r => r.issue === 'misclass').length;
+      cachedContext = `You are an expert SAP MM procurement analyst AI.
+KPIs:
+Total: ${total} | Clean: ${clean} (${quality}%) | Vague: ${vague} | Misclassified: ${misc}
+EBAN: ${eban.length} | EKPO: ${ekpo.length}
 
-      cachedContext = `You are an expert SAP MM procurement data analyst AI embedded in the PR / PO Intelligence Dashboard.
-
-CRITICAL RULES:
-          - The KPI numbers below are the ABSOLUTE GROUND TRUTH
-        - NEVER recalculate totals from sample records — sample is only 50 rows, NOT the full dataset
-        - When asked "how many misclassified" always say exactly: ${misc}
-        - When asked "how many vague" always say exactly: ${vague}
-        - Department breakdown does NOT include blank / unknown departments — those are excluded
-        - Be concise, structured, data - driven
-
-═══════════════════════════════════════
-          LIVE KPIs(EXACT — DO NOT DEVIATE)
-═══════════════════════════════════════
-          Total Records : ${total.toLocaleString()}
-Clean Records : ${clean.toLocaleString()}(${quality} % quality)
-Vague         : ${vague.toLocaleString()}(${Math.round(vague / total * 100)} % of total)
-Misclassified : ${misc.toLocaleString()}(${Math.round(misc / total * 100)} % of total)
-Blank / Junk    : ${blank.toLocaleString()}
-
-EBAN(Purchase Requisitions): ${ebanTotal} total | ${ebanClean} clean | ${ebanVague} vague | ${ebanMisc} misclassified
-EKPO(Purchase Orders)      : ${ekpoTotal} total | ${ekpoClean} clean | ${ekpoVague} vague | ${ekpoMisc} misclassified
-
-ML Model: TF - IDF + Logistic Regression | Accuracy: 91.2 %
-        Feedback Impact: ${total > 0 ? total + ' real-time corrections applied' : 'No analyst feedback yet'}
-        Data Improvement: ${quality}% (Target 95%)
-
-═══════════════════════════════════════
-MATERIAL GROUP BREAKDOWN(ALL ${total} RECORDS)
-═══════════════════════════════════════
+Material Groups:
 ${groupLines}
 
-═══════════════════════════════════════
-DEPARTMENT ISSUES(FROM ALL FLAGGED RECORDS)
-═══════════════════════════════════════
-${deptLines || 'No department data.'}
+Issues by Dept:
+${deptLines}
 
-═══════════════════════════════════════
-TOP MISCLASSIFICATION PATTERNS(ALL ${misc} RECORDS)
-═══════════════════════════════════════
-${patternLines || 'None detected.'}
+Patterns:
+${patternLines}
 
-═══════════════════════════════════════
-SAMPLE MISCLASSIFIED RECORDS(50 of ${misc})
-        Src | Doc | Description | WrongGroup→CorrectGroup | Dept | Plant
-═══════════════════════════════════════
-${misRows || 'None.'}
+Sample Misclass:
+${misRows}
 
-═══════════════════════════════════════
-SAMPLE VAGUE RECORDS(50 of ${vague})
-        Src | Doc | Description | Group | Dept | Plant
-═══════════════════════════════════════
-${vagRows || 'None.'}
-
-═══════════════════════════════════════
-        GROUPS: ROH = Raw Materials, MECH = Mechanical Parts, ELEC = Electrical Components, OFFC = Office Supplies, SAFE = Safety Equipment, ITEQ = IT Equipment, MTNC = Maintenance & Repair, PACK = Packaging, CHEM = Chemicals & Lubricants, FOOD = Canteen & Food
-
-        CAPABILITIES:
-        - Answer questions about data quality, patterns, departments, recommendations
-          - When user asks to download /export CSV, output exactly: DOWNLOAD_CSV: { "filename": "NAME.csv", "type": "TYPE" } where type = misclass | vague | clean | all
-            - Give executive summaries, root cause analysis, improvement recommendations
-              - Always reference exact numbers from the KPIs above`;
+Sample Vague:
+${vagRows}`;
     }
 
     function getSystemPrompt() {
-      if (cachedContext) return cachedContext;
-      return `You are a SAP MM procurement data analyst AI.No data has been analysed yet.Ask the user to upload files and run analysis first.You can still answer general SAP MM and procurement questions.`;
+      return cachedContext || "You are a SAP MM analyst. Please upload data first.";
     }
 
     function toggleChat() {
@@ -3195,225 +3123,79 @@ ${vagRows || 'None.'}
       document.getElementById('chat-window').classList.toggle('open', chatOpen);
       document.getElementById('chat-fab').innerHTML = chatOpen ? '✕' : '💬';
       document.getElementById('chat-overlay').classList.toggle('show', chatOpen);
-      const pulse = document.getElementById('chat-fab-pulse');
-      if (pulse) pulse.style.display = chatOpen ? 'none' : 'block';
       if (chatOpen) setTimeout(() => document.getElementById('chat-input').focus(), 300);
     }
     function closeChat() { if (chatOpen) toggleChat(); }
-    function clearChat() { chatHistory = []; document.getElementById('chat-messages').innerHTML = ''; addWelcomeMessage(); toast('Chat cleared', ''); }
-    function saveApiKey() {
-      const val = document.getElementById('api-key-input').value.trim();
-      if (!val) { toast('Paste your Groq API key first (gsk_...)', 'warn'); return; }
-      if (!val.startsWith('gsk_')) { toast('Groq keys start with gsk_ — check your key', 'warn'); return; }
-      apiKey = val;
-      document.getElementById('api-key-input').value = '••••••••••••••';
-      document.getElementById('key-saved').style.display = 'inline';
-      toast('✓ Groq API key saved — ready!', 'ok');
-      addMessage('ai', '✅ **API key saved!** Ready to go.\n\nUpload your EBAN and EKPO CSV files, click **Analyse Data**, then ask me anything about your procurement data.');
-    }
+    function clearChat() { chatHistory = []; document.getElementById('chat-messages').innerHTML = ''; addWelcomeMessage(); }
 
     function addWelcomeMessage() {
       const msgs = document.getElementById('chat-messages');
       const div = document.createElement('div');
       div.className = 'chat-msg';
-      div.innerHTML = `< div class="chat-avatar ai" >⬡</div >
-          <div class="chat-bubble ai">
-            👋 Hi! I'm your <strong>PR/PO Intelligence Assistant</strong>.<br><br>
-              <strong>To get started:</strong><br>
-                1. Upload your EBAN and EKPO CSV files<br>
-                  2. Click <strong>Analyse Data</strong><br>
-                    3. Come back here and ask me anything!
-                    <div class="model-badge">⬡ Llama 3.3 70B · Groq · Server-Side</div>
-                  </div>`;
+      div.innerHTML = `<div class="chat-avatar ai">⬡</div><div class="chat-bubble ai">👋 Hi! I'm your AI Assistant. Upload data and I'll help you analyze it.</div>`;
       msgs.appendChild(div);
     }
+
     function renderMarkdown(text) {
-      const safe = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-      return safe
-        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-        .replace(/\*(.*?)\*/g, '<em>$1</em>')
-        .replace(/`([^`]+)`/g, '<code>$1</code>')
-        .replace(/^### (.*$)/gm, '<div style="font-size:12px;font-weight:700;color:var(--blue);margin:8px 0 3px">$1</div>')
-        .replace(/^## (.*$)/gm, '<div style="font-size:13px;font-weight:700;margin:10px 0 4px">$1</div>')
-        .replace(/^[-•] (.*$)/gm, '<div style="padding-left:14px;margin:2px 0">• $1</div>')
-        .replace(/^\d+\. (.*$)/gm, '<div style="padding-left:14px;margin:2px 0">$&</div>')
-        .replace(/\n/g, '<br>');
+      return text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br>');
     }
 
     function addMessage(role, text, extraHTML = '') {
       const msgs = document.getElementById('chat-messages');
       const div = document.createElement('div');
       div.className = 'chat-msg ' + (role === 'user' ? 'user' : '');
-      if (role === 'ai') {
-        div.innerHTML = `<div class="chat-avatar ai">⬡</div><div class="chat-bubble ai">${renderMarkdown(text)}${extraHTML}</div>`;
-      } else {
-        const safe = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-        div.innerHTML = `<div class="chat-avatar user">👤</div><div class="chat-bubble user">${safe}</div>`;
-      }
+      div.innerHTML = role === 'ai'
+        ? `<div class="chat-avatar ai">⬡</div><div class="chat-bubble ai">${renderMarkdown(text)}${extraHTML}</div>`
+        : `<div class="chat-avatar user">👤</div><div class="chat-bubble user">${text}</div>`;
       msgs.appendChild(div);
       msgs.scrollTop = msgs.scrollHeight;
     }
-
-    function addThinking() {
-      const msgs = document.getElementById('chat-messages');
-      const div = document.createElement('div');
-      div.className = 'chat-msg'; div.id = 'thinking-msg';
-      div.innerHTML = `<div class="chat-avatar ai">⬡</div><div class="chat-bubble thinking"><span class="typing-dot"></span><span class="typing-dot"></span><span class="typing-dot"></span><span style="margin-left:8px;font-size:11px;color:var(--text2)">Analysing your data...</span></div>`;
-      msgs.appendChild(div);
-      msgs.scrollTop = msgs.scrollHeight;
-    }
-    function removeThinking() { const t = document.getElementById('thinking-msg'); if (t) t.remove(); }
-
-    function downloadCSV(type, filename) {
-      let rows = [], headers = [];
-      if (type === 'misclass') {
-        headers = ['Source', 'Doc_Number', 'Description', 'Wrong_Group', 'Correct_Group', 'Dept_Vendor', 'Plant'];
-        rows = allMisclass.map(r => [r.src, r.BANFN || r.EBELN || '', r.TXZ01 || '', r.MATGR || '', r.correct || '', r.AFNAM || r.LIFNR || '', r.WERKS || '']);
-      } else if (type === 'vague') {
-        headers = ['Source', 'Doc_Number', 'Description', 'Assigned_Group', 'Dept_Vendor', 'Plant'];
-        rows = allVague.map(r => [r.src, r.BANFN || r.EBELN || '', r.TXZ01 || '', r.MATGR || '', r.AFNAM || r.LIFNR || '', r.WERKS || '']);
-      } else if (type === 'clean') {
-        headers = ['Source', 'Doc_Number', 'Description', 'Group', 'Dept_Vendor', 'Plant'];
-        rows = allAnalyzed.filter(r => r.issue === 'clean').map(r => [r.src, r.BANFN || r.EBELN || '', r.TXZ01 || '', r.MATGR || '', r.AFNAM || r.LIFNR || '', r.WERKS || '']);
-      } else {
-        headers = ['Source', 'Doc_Number', 'Description', 'Group', 'Issue', 'Correct_Group', 'Dept_Vendor', 'Plant'];
-        rows = allAnalyzed.map(r => [r.src, r.BANFN || r.EBELN || '', r.TXZ01 || '', r.MATGR || '', r.issue || '', r.correct || '', r.AFNAM || r.LIFNR || '', r.WERKS || '']);
-      }
-      const csv = [headers, ...rows].map(row => row.map(c => `"${String(c || '').replace(/"/g, '""')}"`).join(',')).join('\n');
-      const blob = new Blob([csv], { type: 'text/csv' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url; a.download = filename || 'export.csv'; a.click();
-      URL.revokeObjectURL(url);
-      toast('✓ Downloaded: ' + filename, 'ok');
-    }
-
-    function handleDownloadCommand(text) {
-      const match = text.match(/DOWNLOAD_CSV:\s*\{\s*"filename"\s*:\s*"([^"]+)"\s*,\s*"type"\s*:\s*"([^"]+)"\s*\}/);
-      if (match) {
-        const fname = match[1], type = match[2];
-        const cleanText = text.replace(/DOWNLOAD_CSV:\s*\{[^\}]+\}/g, '').trim();
-        const dlBtn = `<button class="chat-dl-btn" onclick="downloadCSV('${type}','${fname}')">⬇ Download ${fname}</button>`;
-        addMessage('ai', cleanText, dlBtn);
-        return true;
-      }
-      return false;
-    }
-
-    function quickAsk(q) { document.getElementById('chat-input').value = q; sendMessage(); }
-
-    let lastRequestTime = 0;
 
     async function sendMessage() {
       const input = document.getElementById('chat-input');
       const msg = input.value.trim();
       if (!msg) return;
       input.value = '';
-      input.style.height = 'auto';
-      document.getElementById('chat-send').disabled = true;
       addMessage('user', msg);
       chatHistory.push({ role: 'user', content: msg });
-
-      lastRequestTime = Date.now();
-      addThinking();
 
       try {
         const response = await fetch('/api/chat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            system: getSystemPrompt(),
-            messages: chatHistory.slice(-14),
-            max_tokens: 800
-          })
+          body: JSON.stringify({ system: getSystemPrompt(), messages: chatHistory.slice(-10) })
         });
         const data = await response.json();
-        removeThinking();
-        if (!response.ok) {
-          const errMsg = data?.error || 'Server error ' + response.status;
-          addMessage('ai', '⚠ **Error:** ' + errMsg);
-          toast('Error: ' + String(errMsg).slice(0, 50), 'warn');
-        } else {
-          const reply = data.text || 'No response received.';
-          if (!handleDownloadCommand(reply)) addMessage('ai', reply);
-          chatHistory.push({ role: 'assistant', content: reply });
-        }
-      } catch (err) {
-        removeThinking();
-        addMessage('ai', '⚠ **Error:** ' + err.message);
-        toast('Network error', 'warn');
-      }
-      document.getElementById('chat-send').disabled = false;
-      input.focus();
+        const reply = data.text || 'Error communicating with AI.';
+        addMessage('ai', reply);
+        chatHistory.push({ role: 'assistant', content: reply });
+      } catch (err) { addMessage('ai', 'Network error.'); }
     }
 
     window.addEventListener('DOMContentLoaded', () => {
       addWelcomeMessage();
       refreshFeedbackStats();
       loadVerifyTab();
-      fetch('/api/feedback/stats').then(r => r.json()).then(data => {
-        updateCorrectionCounter(data.total_corrections || 0);
-      }).catch(() => { });
     });
   </script>
 
-  <!-- CHATBOX HTML -->
   <div class="chat-overlay" id="chat-overlay" onclick="closeChat()"></div>
-  <div class="chat-fab-pulse" id="chat-fab-pulse"></div>
-  <button class="chat-fab" id="chat-fab" onclick="toggleChat()" title="Open AI Assistant">💬</button>
-
+  <button class="chat-fab" id="chat-fab" onclick="toggleChat()">💬</button>
   <div class="chat-window" id="chat-window">
     <div class="chat-header">
       <div class="chat-header-icon">⬡</div>
-      <div style="flex:1;min-width:0">
-        <div class="chat-header-title">PR/PO Intelligence Assistant</div>
-        <div class="chat-header-sub"><span class="ch-dot"></span>Llama 3.3 70B · Groq · Full Data Access · Export Ready
-        </div>
+      <div style="flex:1">
+        <div class="chat-header-title">AI Assistant</div>
       </div>
-      <div class="chat-header-actions">
-        <button class="ch-btn" onclick="clearChat()" title="Clear chat">🗑</button>
-        <button class="ch-btn" onclick="toggleChat()" title="Close">✕</button>
-      </div>
+      <button class="ch-btn" onclick="toggleChat()">✕</button>
     </div>
-
-    <div
-      style="padding:6px 14px;background:var(--bg);border-bottom:1px solid var(--border);font-size:10px;color:var(--green);font-family:var(--mono);text-align:center;">
-      ✓ Powered by Llama 3.3 70B · Server-Side · No API Key Needed
-    </div>
-
-
-
     <div class="chat-messages" id="chat-messages"></div>
-
-    <div style="padding:0 12px 8px">
-      <div style="display:flex;gap:5px;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;">
-        <div class="chat-quick-btn" onclick="quickAsk('Give me a full data quality summary of this dataset.')">📊
-          Quality summary</div>
-        <div class="chat-quick-btn"
-          onclick="quickAsk('Which department has the most issues? Show a ranked breakdown.')">🏢 Worst department</div>
-        <div class="chat-quick-btn" onclick="quickAsk('Download all misclassified records as CSV.')">⬇ Export
-          misclassified</div>
-        <div class="chat-quick-btn" onclick="quickAsk('Download all vague description records as CSV.')">⬇ Export vague
-        </div>
-        <div class="chat-quick-btn" onclick="quickAsk('What are the top misclassification patterns?')">⚠ Misclass
-          patterns</div>
-        <div class="chat-quick-btn" onclick="quickAsk('Give me an executive summary to present  .')">📋
-          Executive summary</div>
-        <div class="chat-quick-btn"
-          onclick="quickAsk('What improvements do you recommend to fix data quality issues?')">💡 Recommendations</div>
-      </div>
-    </div>
-
     <div class="chat-input-row">
-      <textarea class="chat-input" id="chat-input"
-        placeholder="Ask anything — show records, download CSV, explain patterns..." rows="1"
-        oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,90)+'px'"
-        onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendMessage();}"></textarea>
-      <button class="chat-send" id="chat-send" onclick="sendMessage()" title="Send (Enter)">➤</button>
+      <textarea class="chat-input" id="chat-input" placeholder="Ask a question..."
+        onkeydown="if(event.key==='Enter'){sendMessage();}"></textarea>
+      <button class="chat-send" onclick="sendMessage()">➤</button>
     </div>
-    <div class="rate-info">Llama 3.3 70B · Groq · Hosted on server ✓</div>
   </div>
-
 </body>
 
 </html>
