@@ -3277,6 +3277,19 @@ ${vagRows}`;
       msgs.scrollTop = msgs.scrollHeight;
     }
 
+    function exportDataset(dataArr, filename) {
+      if (!dataArr || dataArr.length === 0) { toast('No data to export', 'warn'); return; }
+      const keys = Object.keys(dataArr[0]).filter(k => !k.startsWith('_') && k !== 'top3');
+      const rows = dataArr.map(r => keys.map(k => `"${String(r[k] || '').replace(/"/g, '""')}"`).join(','));
+      const csvContent = keys.join(',') + '\n' + rows.join('\n');
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url; link.download = filename;
+      document.body.appendChild(link); link.click(); document.body.removeChild(link);
+      toast(`✓ Downloaded ${filename}`, 'ok');
+    }
+
     async function sendMessage() {
       const input = document.getElementById('chat-input');
       const msg = input.value.trim();
@@ -3318,10 +3331,20 @@ ${vagRows}`;
     <div class="chat-messages" id="chat-messages"></div>
     <div class="chat-quick-actions"
       style="padding: 10px; display: flex; flex-wrap: wrap; gap: 6px; border-top: 1px solid var(--border);">
+      <button class="chat-quick-btn" onclick="exportDataset(allMisclass, 'Misclassifications.csv')"
+        style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:6px 12px;border-radius:15px;font-size:11px;cursor:pointer;transition:all 0.2s">⬇️
+        Export Misclass</button>
+      <button class="chat-quick-btn" onclick="exportDataset(allVague, 'Vague_Descriptions.csv')"
+        style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:6px 12px;border-radius:15px;font-size:11px;cursor:pointer;transition:all 0.2s">⬇️
+        Export Vague</button>
       <button class="chat-quick-btn"
-        onclick="document.getElementById('chat-input').value='Provide a 2-sentence executive summary of our overall data quality.'; sendMessage()"
+        onclick="exportDataset(allAnalyzed.filter(r=>r.issue==='clean'), 'Clean_Records.csv')"
+        style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:6px 12px;border-radius:15px;font-size:11px;cursor:pointer;transition:all 0.2s">⬇️
+        Export Clean</button>
+      <button class="chat-quick-btn"
+        onclick="document.getElementById('chat-input').value='Provide a comprehensive data quality breakdown.'; sendMessage()"
         style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:6px 12px;border-radius:15px;font-size:11px;cursor:pointer;transition:all 0.2s">📊
-        Executive Summary</button>
+        Data Quality Breakdown</button>
       <button class="chat-quick-btn"
         onclick="document.getElementById('chat-input').value='What are the top 3 misclassifications happening in the system?'; sendMessage()"
         style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:6px 12px;border-radius:15px;font-size:11px;cursor:pointer;transition:all 0.2s">⚠️
