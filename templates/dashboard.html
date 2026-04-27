@@ -2261,6 +2261,8 @@
         let grp = mlGrp || r.MATGR || r.Predicted || r.predicted || '';
         const known = knownCorrections[txt.toLowerCase().trim()];
         const isHighlyConfident = ml && ml.confidence >= 98 && known;
+        let issue, correct;
+        const c = classifyRow(txt, origGrp);
 
         if (known && (known.count >= threshold || isHighlyConfident)) {
           issue = 'clean'; correct = null;
@@ -2282,9 +2284,11 @@
         const ml = mlResults ? mlResults[ebanLen + idx] : null;
         const mlGrp = ml && ml.confidence >= 70 ? ml.predicted : null;
         let grp = mlGrp || r.MATGR || r.Predicted || r.predicted || '';
-        const origGrp = r.MATGR || r.Predicted || r.predicted || '';
         const knownEk = knownCorrections[txt.toLowerCase().trim()];
         const isHighlyConfidentEk = ml && ml.confidence >= 98 && knownEk;
+        const origGrp = r.MATGR || r.Predicted || r.predicted || '';
+        let issue, correct;
+        const c = classifyRow(txt, origGrp);
 
         if (knownEk && (knownEk.count >= threshold || isHighlyConfidentEk)) {
           issue = 'clean'; correct = null;
