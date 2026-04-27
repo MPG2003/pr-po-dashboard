@@ -1788,11 +1788,21 @@
             <div class="page-sub">Analyst corrections continuously improve the NLP model — tracked, measurable, provable
             </div>
           </div>
-          <div style="display:flex;gap:8px">
+          <div style="display:flex;gap:8px;align-items:center">
             <button class="btn btn-ghost" style="font-size:12px" onclick="refreshFeedbackStats()">↻ Refresh</button>
-            <button class="btn btn-ghost" style="font-size:12px;color:var(--red)" onclick="confirmResetFeedback()">⊘
-              Reset</button>
+            <button class="btn btn-ghost" style="font-size:12px;color:var(--green)" onclick="exportFeedback()" title="Download feedback.csv to your computer">⬇ Export</button>
+            <label class="btn btn-ghost" style="font-size:12px;color:var(--blue);cursor:pointer" title="Restore a previously exported feedback.csv">
+              ⬆ Import
+              <input type="file" id="import-file" accept=".csv" style="display:none" onchange="importFeedback(this)">
+            </label>
+            <button class="btn btn-ghost" style="font-size:12px;color:var(--red)" onclick="confirmResetFeedback()">⊘ Reset</button>
           </div>
+        </div>
+
+        <!-- Persistence reminder banner -->
+        <div style="display:flex;align-items:center;gap:10px;background:var(--yellow-dim);border:1px solid rgba(210,153,34,.25);border-radius:var(--r);padding:10px 16px;margin-bottom:20px;font-size:12px;color:var(--yellow)">
+          <span style="font-size:14px">⚠</span>
+          <span><strong>Before redeploying:</strong> click <strong>⬇ Export</strong> to save your corrections locally. After deploy, use <strong>⬆ Import</strong> to restore them. This protects your data until a persistent volume is available.</span>
         </div>
 
         <!-- KPI Row -->
@@ -2551,6 +2561,46 @@
 
     function renderReviewTable(data) { renderReviewBatch(); }
     // ── FEEDBACK LEARNING JS ──────────────────────────────────────────────
+    // ── EXPORT / IMPORT ───────────────────────────────────────────────────
+    async function exportFeedback() {
+      try {
+        const resp = await fetch('/api/feedback/export');
+        if (resp.status === 404) { toast('No corrections to export yet', 'warn'); return; }
+        if (!resp.ok) { toast('Export failed', 'warn'); return; }
+        const blob = await resp.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'feedback_' + new Date().toISOString().slice(0,10) + '.csv';
+        a.click();
+        URL.revokeObjectURL(url);
+        toast('✓ feedback.csv downloaded — keep this file safe!', 'ok');
+      } catch (e) { toast('Export error: ' + e.message, 'warn'); }
+    }
+
+    async function importFeedback(input) {
+      const file = input.files[0];
+      if (!file) return;
+      if (!confirm(`Import "${file.name}"? This will REPLACE your current corrections on the server. Make sure you exported first.`)) {
+        input.value = ''; return;
+      }
+      try {
+        const formData = new FormData();
+        formData.append('file', file);
+        const resp = await fetch('/api/feedback/import', { method: 'POST', body: formData });
+        const data = await resp.json();
+        if (data.imported) {
+          toast(`✓ Imported ${data.total_corrections} corrections successfully!`, 'ok');
+          refreshFeedbackStats();
+        } else {
+          toast('Import failed: ' + (data.error || 'unknown error'), 'warn');
+        }
+      } catch (e) {
+        toast('Import error: ' + e.message, 'warn');
+      }
+      input.value = '';
+    }
+
     function confirmResetFeedback() {
       if (confirm('Reset all feedback data and baseline? This cannot be undone.')) {
         fetch('/api/feedback/reset', { method: 'POST' }).then(() => {
