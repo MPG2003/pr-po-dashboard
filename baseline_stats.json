@@ -1,1 +1,9 @@
-{"total": 8000, "clean": 5423, "vague": 1156, "misclass": 0, "blank": 489, "quality": 68, "saved_at": "2026-04-26 19:38"}
+{
+  "total": 8000,
+  "clean": 5424,
+  "vague": 1156,
+  "misclass": 932,
+  "blank": 489,
+  "quality": 68,
+  "saved_at": "2026-04-26 19:38"
+}
