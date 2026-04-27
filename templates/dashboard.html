@@ -2258,7 +2258,7 @@
         const ml = mlResults ? mlResults[idx] : null;
         // Use ML predicted group if available and confident, else keep original
         const mlGrp = ml && ml.confidence >= 70 ? ml.predicted : null;
-        const grp = mlGrp || r.MATGR || r.Predicted || r.predicted || '';
+        let grp = mlGrp || r.MATGR || r.Predicted || r.predicted || '';
         const known = knownCorrections[txt.toLowerCase().trim()];
         const isHighlyConfident = ml && ml.confidence >= 98 && known;
 
@@ -2281,7 +2281,7 @@
         const txt = r.TXZ01 || r.Description || r.description || '';
         const ml = mlResults ? mlResults[ebanLen + idx] : null;
         const mlGrp = ml && ml.confidence >= 70 ? ml.predicted : null;
-        const grp = mlGrp || r.MATGR || r.Predicted || r.predicted || '';
+        let grp = mlGrp || r.MATGR || r.Predicted || r.predicted || '';
         const origGrp = r.MATGR || r.Predicted || r.predicted || '';
         const knownEk = knownCorrections[txt.toLowerCase().trim()];
         const isHighlyConfidentEk = ml && ml.confidence >= 98 && knownEk;
