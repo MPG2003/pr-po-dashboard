@@ -2218,9 +2218,23 @@
         if (kcResp.ok) {
           const kcData = await kcResp.json();
           knownCorrections = kcData.corrections || {};
-          if (kcData.total > 0) toast(`✓ ${kcData.total} known corrections loaded — will auto-apply`, 'ok');
         }
       } catch (e) { /* no server */ }
+
+      // MERGE LOCAL STORAGE (Safety net for Railway restarts)
+      try {
+        const localStore = JSON.parse(localStorage.getItem('analyst_corrections') || '{}');
+        for (const [d, v] of Object.entries(localStore)) {
+          if (!knownCorrections[d]) {
+            knownCorrections[d] = v;
+          } else {
+            // If server has it, combine counts
+            knownCorrections[d].count = Math.max(knownCorrections[d].count, v.count);
+          }
+        }
+        const totalKnown = Object.keys(knownCorrections).length;
+        if (totalKnown > 0) toast(`✓ ${totalKnown} resolution rules active (Server + Browser Memory)`, 'ok');
+      } catch (e) { }
       try {
         showStep(); i++; // Show "Sending to ML model..."
         const resp = await fetch('/api/classify', {
@@ -2912,6 +2926,21 @@
           toast(`✓ Correction saved — ${data.next_retrain_in} more until model retrains`, 'ok');
         }
         updateCorrectionCounter(data.total_corrections);
+
+        // PERSISTENCE: Save to LocalStorage to protect work from Railway restarts
+        try {
+          const localStore = JSON.parse(localStorage.getItem('analyst_corrections') || '{}');
+          const dLow = description.toLowerCase().trim();
+          if (!localStore[dLow]) {
+            localStore[dLow] = { grp: correctGroup, count: 1 };
+          } else {
+            localStore[dLow].grp = correctGroup;
+            localStore[dLow].count += 1;
+          }
+          localStorage.setItem('analyst_corrections', JSON.stringify(localStore));
+        } catch (e) {
+          console.warn('LocalStorage error:', e);
+        }
       } catch (e) {
         console.warn('Feedback API error:', e);
       }
