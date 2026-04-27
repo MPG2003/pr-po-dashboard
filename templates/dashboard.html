@@ -3330,28 +3330,28 @@ ${vagRows}`;
     </div>
     <div class="chat-messages" id="chat-messages"></div>
     <div class="chat-quick-actions"
-      style="padding: 10px; display: flex; flex-wrap: wrap; gap: 6px; border-top: 1px solid var(--border);">
+      style="padding: 10px; display: flex; flex-wrap: nowrap; gap: 8px; border-top: 1px solid var(--border); overflow-x: auto; padding-bottom: 12px; scrollbar-width: thin; scrollbar-color: var(--border2) transparent;">
       <button class="chat-quick-btn" onclick="exportDataset(allMisclass, 'Misclassifications.csv')"
-        style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:6px 12px;border-radius:15px;font-size:11px;cursor:pointer;transition:all 0.2s">⬇️
+        style="flex-shrink:0;white-space:nowrap;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:6px 12px;border-radius:15px;font-size:11px;cursor:pointer;transition:all 0.2s">⬇️
         Export Misclass</button>
       <button class="chat-quick-btn" onclick="exportDataset(allVague, 'Vague_Descriptions.csv')"
-        style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:6px 12px;border-radius:15px;font-size:11px;cursor:pointer;transition:all 0.2s">⬇️
+        style="flex-shrink:0;white-space:nowrap;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:6px 12px;border-radius:15px;font-size:11px;cursor:pointer;transition:all 0.2s">⬇️
         Export Vague</button>
       <button class="chat-quick-btn"
         onclick="exportDataset(allAnalyzed.filter(r=>r.issue==='clean'), 'Clean_Records.csv')"
-        style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:6px 12px;border-radius:15px;font-size:11px;cursor:pointer;transition:all 0.2s">⬇️
+        style="flex-shrink:0;white-space:nowrap;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:6px 12px;border-radius:15px;font-size:11px;cursor:pointer;transition:all 0.2s">⬇️
         Export Clean</button>
       <button class="chat-quick-btn"
         onclick="document.getElementById('chat-input').value='Provide a comprehensive data quality breakdown.'; sendMessage()"
-        style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:6px 12px;border-radius:15px;font-size:11px;cursor:pointer;transition:all 0.2s">📊
+        style="flex-shrink:0;white-space:nowrap;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:6px 12px;border-radius:15px;font-size:11px;cursor:pointer;transition:all 0.2s">📊
         Data Quality Breakdown</button>
       <button class="chat-quick-btn"
         onclick="document.getElementById('chat-input').value='What are the top 3 misclassifications happening in the system?'; sendMessage()"
-        style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:6px 12px;border-radius:15px;font-size:11px;cursor:pointer;transition:all 0.2s">⚠️
+        style="flex-shrink:0;white-space:nowrap;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:6px 12px;border-radius:15px;font-size:11px;cursor:pointer;transition:all 0.2s">⚠️
         Top Misclasses</button>
       <button class="chat-quick-btn"
         onclick="document.getElementById('chat-input').value='Which department requires the most data entry retraining?'; sendMessage()"
-        style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:6px 12px;border-radius:15px;font-size:11px;cursor:pointer;transition:all 0.2s">🏢
+        style="flex-shrink:0;white-space:nowrap;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:6px 12px;border-radius:15px;font-size:11px;cursor:pointer;transition:all 0.2s">🏢
         Dept Breakdown</button>
     </div>
     <div class="chat-input-row" style="border-top:none;padding-top:0;">
