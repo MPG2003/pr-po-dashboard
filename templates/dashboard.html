@@ -2252,10 +2252,11 @@
         const grp = mlGrp || r.MATGR || r.Predicted || r.predicted || '';
         // Use ML to detect misclassification: if ML says different group with high confidence
         let issue, correct;
-        const origGrp = r.MATGR || r.Predicted || r.predicted || '';
         const c = classifyRow(txt, origGrp);
-        // Check if analyst already corrected this description
-        if (c.issue === 'blank') { issue = 'blank'; correct = null; }
+        const knownGrp = knownCorrections[txt.toLowerCase().trim()];
+        if (knownGrp) {
+          issue = 'clean'; correct = null;
+        } else if (c.issue === 'blank') { issue = 'blank'; correct = null; }
         else if (c.issue === 'vague') { issue = 'vague'; correct = null; }
         else if (ml && ml.confidence >= 85 && ml.predicted.trim() !== origGrp.trim() && origGrp.trim()) { issue = 'misclass'; correct = ml.predicted; }
         else { issue = 'clean'; correct = null; }
@@ -2270,8 +2271,12 @@
         const mlGrp = ml && ml.confidence >= 70 ? ml.predicted : null;
         const grp = mlGrp || r.MATGR || r.Predicted || r.predicted || '';
         const origGrp = r.MATGR || r.Predicted || r.predicted || '';
+        let issue, correct;
         const c = classifyRow(txt, origGrp);
-        if (c.issue === 'blank') { issue = 'blank'; correct = null; }
+        const knownGrpEkpo = knownCorrections[txt.toLowerCase().trim()];
+        if (knownGrpEkpo) {
+          issue = 'clean'; correct = null;
+        } else if (c.issue === 'blank') { issue = 'blank'; correct = null; }
         else if (c.issue === 'vague') { issue = 'vague'; correct = null; }
         else if (ml && ml.confidence >= 85 && ml.predicted.trim() !== origGrp.trim() && origGrp.trim()) { issue = 'misclass'; correct = ml.predicted; }
         else { issue = 'clean'; correct = null; }
