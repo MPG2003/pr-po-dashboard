@@ -3213,24 +3213,30 @@
       const misRows = allMisclass.slice(0, 50).map(r => `${r.src} | ${r.TXZ01} | ${r.MATGR}→${r.correct}`).join('\n');
       const vagRows = allVague.slice(0, 50).map(r => `${r.src} | ${r.TXZ01} | ${r.MATGR}`).join('\n');
 
-      cachedContext = `You are an expert SAP MM procurement analyst AI.
-KPIs:
-Total: ${total} | Clean: ${clean} (${quality}%) | Vague: ${vague} | Misclassified: ${misc}
-EBAN: ${eban.length} | EKPO: ${ekpo.length}
+      cachedContext = `You are a highly intelligent SAP MM Executive Analyst AI.
+CRITICAL INSTRUCTION: Analyze the provided data below and answer the user's question directly with concise, actionable insights. Do NOT output empty templates or skeleton responses. DO NOT use filler text. Synthesize the numbers into a meaningful business narrative.
 
-Material Groups:
+--- CURRENT PROCUREMENT DASHBOARD METRICS ---
+OVERALL KPIs:
+Total Records Analyzed: ${total}
+Clean Records: ${clean} (Quality Score: ${quality}%)
+Vague Descriptions: ${vague}
+Misclassified Records: ${misc}
+Source Document Split: EBAN PRs = ${eban.length} | EKPO POs = ${ekpo.length}
+
+MATERIAL CATEGORY BREAKDOWN:
 ${groupLines}
 
-Issues by Dept:
+DEPARTMENTS/VENDORS WITH MOST ISSUES:
 ${deptLines}
 
-Patterns:
+FREQUENT ALGORITHMIC MISCLASSIFICATION PATTERNS:
 ${patternLines}
 
-Sample Misclass:
+SAMPLE MISCLASSIFICATION RECORDS:
 ${misRows}
 
-Sample Vague:
+SAMPLE VAGUE RECORDS:
 ${vagRows}`;
     }
 
@@ -3310,7 +3316,22 @@ ${vagRows}`;
       <button class="ch-btn" onclick="toggleChat()">✕</button>
     </div>
     <div class="chat-messages" id="chat-messages"></div>
-    <div class="chat-input-row">
+    <div class="chat-quick-actions"
+      style="padding: 10px; display: flex; flex-wrap: wrap; gap: 6px; border-top: 1px solid var(--border);">
+      <button class="chat-quick-btn"
+        onclick="document.getElementById('chat-input').value='Provide a 2-sentence executive summary of our overall data quality.'; sendMessage()"
+        style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:6px 12px;border-radius:15px;font-size:11px;cursor:pointer;transition:all 0.2s">📊
+        Executive Summary</button>
+      <button class="chat-quick-btn"
+        onclick="document.getElementById('chat-input').value='What are the top 3 misclassifications happening in the system?'; sendMessage()"
+        style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:6px 12px;border-radius:15px;font-size:11px;cursor:pointer;transition:all 0.2s">⚠️
+        Top Misclasses</button>
+      <button class="chat-quick-btn"
+        onclick="document.getElementById('chat-input').value='Which department requires the most data entry retraining?'; sendMessage()"
+        style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:6px 12px;border-radius:15px;font-size:11px;cursor:pointer;transition:all 0.2s">🏢
+        Dept Breakdown</button>
+    </div>
+    <div class="chat-input-row" style="border-top:none;padding-top:0;">
       <textarea class="chat-input" id="chat-input" placeholder="Ask a question..."
         onkeydown="if(event.key==='Enter'){sendMessage();}"></textarea>
       <button class="chat-send" onclick="sendMessage()">➤</button>
