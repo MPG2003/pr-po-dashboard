@@ -198,10 +198,12 @@ def feedback():
 # ── API: Verify feedback learning — before/after classify ─────
 # ── API: Save baseline (called once after first analysis) ─────
 @app.route("/api/baseline", methods=["POST"])
+@app.route("/api/analysis/baseline", methods=["POST"])
 def save_baseline():
     import json
     body = request.get_json(force=True)
-    if os.path.exists(BASELINE_PATH):
+    force = body.get("force", False)
+    if os.path.exists(BASELINE_PATH) and not force:
         return jsonify({"message": "Baseline already exists", "exists": True})
     try:
         with open(BASELINE_PATH, "w", encoding="utf-8") as f:
