@@ -254,6 +254,40 @@ def known_corrections():
         print(f"Error reading feedback: {e}")
     return jsonify({"corrections": corrections, "total": len(corrections), "total_raw": total_raw})
 
+# ── API: Export feedback.csv as download ─────────────────────
+@app.route("/api/feedback/export", methods=["GET"])
+def export_feedback():
+    if not os.path.exists(FEEDBACK_PATH):
+        return jsonify({"error": "No feedback data to export"}), 404
+    return send_file(FEEDBACK_PATH, mimetype="text/csv",
+                     as_attachment=True, download_name="feedback.csv")
+
+# ── API: Import feedback.csv upload ──────────────────────────
+@app.route("/api/feedback/import", methods=["POST"])
+def import_feedback():
+    global total_corrections, feedback_count
+    if "file" not in request.files:
+        return jsonify({"error": "No file uploaded"}), 400
+    f = request.files["file"]
+    if not f.filename.endswith(".csv"):
+        return jsonify({"error": "Must be a .csv file"}), 400
+    try:
+        content = f.read().decode("utf-8")
+        # Validate it has our expected header
+        first_line = content.split("\n")[0].strip()
+        if "DESCRIPTION" not in first_line or "MATERIAL_GROUP" not in first_line:
+            return jsonify({"error": "Invalid feedback CSV format — expected DESCRIPTION, MATERIAL_GROUP columns"}), 400
+        with open(FEEDBACK_PATH, "w", encoding="utf-8") as out:
+            out.write(content)
+        # Recount after import
+        total_corrections = max(0, content.count("\n") - 1)
+        feedback_count = total_corrections % RETRAIN_EVERY
+        print(f"✓ Imported feedback.csv — {total_corrections} corrections restored")
+        return jsonify({"imported": True, "total_corrections": total_corrections,
+                        "message": f"Successfully imported {total_corrections} corrections"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 # ── API: Reset feedback ───────────────────────────────────────
 @app.route("/api/feedback/reset", methods=["POST"])
 def reset_feedback():
