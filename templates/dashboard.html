@@ -2740,7 +2740,6 @@
 
         if (!data.results || data.results.length === 0) {
           document.getElementById('verify-empty').style.display = 'block';
-          document.getElementById('fb-learning-rate').textContent = '—';
           return;
         }
 
@@ -2785,9 +2784,14 @@
       } catch (e) {
         console.error('Verify Tab Error:', e);
         document.getElementById('verify-loading').style.display = 'none';
-        document.getElementById('verify-empty').style.display = 'block';
-        const msg = (e.name === 'SyntaxError') ? 'Server returned invalid data' : 'Could not reach server — check Flask logs';
-        document.getElementById('verify-empty').querySelector('div:last-child').textContent = msg;
+        const emptyEl = document.getElementById('verify-empty');
+        if (emptyEl) {
+          emptyEl.style.display = 'block';
+          const msgEl = emptyEl.querySelector('div:last-child');
+          if (msgEl) {
+            msgEl.textContent = (e.name === 'SyntaxError') ? 'Analysis server returned invalid data.' : 'Could not reach analysis server. Please check your data or try again.';
+          }
+        }
       }
     }
 
