@@ -2285,7 +2285,7 @@
         let grp = mlGrp || r.MATGR || r.Predicted || r.predicted || '';
         const origGrp = r.MATGR || r.Predicted || r.predicted || '';
         const known = knownCorrections[txt.toLowerCase().trim()];
-        const isHighlyConfident = ml && ml.confidence >= 98 && known;
+        const isHighlyConfident = ml && ml.confidence >= 99 && known;
         let issue, correct;
         const c = classifyRow(txt, origGrp);
 
@@ -2297,7 +2297,7 @@
           issue = 'vague'; correct = null;
           r.consensus_progress = known ? `${known.count}/${threshold}` : `0/${threshold}`;
         }
-        else if (ml && ml.confidence >= 85 && ml.predicted.trim() !== origGrp.trim() && origGrp.trim()) { issue = 'misclass'; correct = ml.predicted; }
+        else if (ml && ml.confidence >= 95 && ml.predicted.trim() !== origGrp.trim() && origGrp.trim()) { issue = 'misclass'; correct = ml.predicted; }
         else { issue = 'clean'; correct = null; }
         let dept = r.AFNAM || r.DEPARTMENT || r.department || '—';
         if (dept === '—' || dept === '-') dept = 'External Vendor';
@@ -2310,7 +2310,7 @@
         const mlGrp = ml && ml.confidence >= 70 ? ml.predicted : null;
         let grp = mlGrp || r.MATGR || r.Predicted || r.predicted || '';
         const knownEk = knownCorrections[txt.toLowerCase().trim()];
-        const isHighlyConfidentEk = ml && ml.confidence >= 98 && knownEk;
+        const isHighlyConfidentEk = ml && ml.confidence >= 99 && knownEk;
         const origGrp = r.MATGR || r.Predicted || r.predicted || '';
         let issue, correct;
         const c = classifyRow(txt, origGrp);
@@ -2323,7 +2323,7 @@
           issue = 'vague'; correct = null;
           r.consensus_progress = knownEk ? `${knownEk.count}/${threshold}` : `0/${threshold}`;
         }
-        else if (ml && ml.confidence >= 85 && ml.predicted.trim() !== origGrp.trim() && origGrp.trim()) { issue = 'misclass'; correct = ml.predicted; }
+        else if (ml && ml.confidence >= 95 && ml.predicted.trim() !== origGrp.trim() && origGrp.trim()) { issue = 'misclass'; correct = ml.predicted; }
         else { issue = 'clean'; correct = null; }
         let vendor = r.LIFNR || r.VENDOR || r.vendor || r.DEPARTMENT || r.department || '—';
         if (vendor === '—' || vendor === '-') vendor = 'External Vendor';
@@ -2351,7 +2351,9 @@
       allMisclass = all.filter(r => r.issue === 'misclass');
       allVague = all.filter(r => r.issue === 'vague');
       allVague = all.filter(r => r.issue === 'vague');
-      allReview = allVague;
+      // FIX: include BOTH vague AND misclassified in review queue so analysts
+      // always have work to do and the feedback loop keeps running
+      allReview = [...allVague, ...allMisclass];
 
       reviewBatchStart = 0;
       document.getElementById('sb-review').textContent = allReview.length;
