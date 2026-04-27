@@ -2735,6 +2735,7 @@
 
     function confirmResetFeedback() {
       if (confirm('Reset all feedback data and baseline? This cannot be undone.')) {
+        localStorage.removeItem('analyst_corrections');
         fetch('/api/feedback/reset', { method: 'POST' }).then(() => {
           toast('✓ Feedback reset — fresh start', 'ok');
           refreshFeedbackStats();
