@@ -382,6 +382,9 @@ def retrain_model():
                 if "ACTION" in fb_df.columns:
                     fb_df = fb_df[fb_df["ACTION"].isin(["accept", "edit"])]
                 
+                # CRITICAL: If analyst corrected the same word twice, always use the LATEST one.
+                fb_df = fb_df.drop_duplicates(subset=["DESCRIPTION"], keep="last")
+                
                 fb_df = fb_df[fb_df["MATERIAL_GROUP"].isin(MATERIAL_GROUPS.keys())]
                 if len(fb_df) > 0:
                     fb_X = pd.concat([fb_df["DESCRIPTION"].str.lower()] * 20)
