@@ -391,7 +391,19 @@ def retrain_model():
                 
                 # CRITICAL: If analyst corrected the same word twice, always use the LATEST one.
                 fb_df = fb_df.drop_duplicates(subset=["DESCRIPTION"], keep="last")
+                fb_df["DESCRIPTION_LOWER"] = fb_df["DESCRIPTION"].str.lower().str.strip()
                 
+                # REMOVE CONFLICTING DATA: Delete records from base training data that match feedback descriptions
+                # This ensures the model follows the Analyst's new rules without competition.
+                known_descs = set(fb_df["DESCRIPTION_LOWER"].unique())
+                initial_count = len(X_train_base)
+                mask = ~X_train_base.str.lower().str.strip().isin(known_descs)
+                X_train_base = X_train_base[mask]
+                y_train_base = y_train_base[mask]
+                removed_count = initial_count - len(X_train_base)
+                if removed_count > 0:
+                    print(f"  ✓ Sanitized {removed_count} conflicting records from base training data")
+
                 fb_df = fb_df[fb_df["MATERIAL_GROUP"].isin(MATERIAL_GROUPS.keys())]
                 if len(fb_df) > 0:
                     fb_X = pd.concat([fb_df["DESCRIPTION"].str.lower()] * 500)
