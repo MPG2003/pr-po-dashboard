@@ -1930,9 +1930,9 @@
                     style="width:22px;height:22px;background:var(--green-dim);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:var(--green);flex-shrink:0">
                     2</div>
                   <div>
-                    <div style="font-size:12px;font-weight:600">Every 10 Corrections → Model Retrains</div>
-                    <div style="font-size:11px;color:var(--text2);margin-top:2px">Corrections weighted 5× in training
-                      data</div>
+                    <div style="font-size:12px;font-weight:600">Model Improvement Cycle</div>
+                    <div style="font-size:11px;color:var(--text2);margin-top:2px">Every 10 corrections triggers a
+                      background model update</div>
                   </div>
                 </div>
                 <div
@@ -2604,6 +2604,7 @@
           document.getElementById('imp-vague-base').textContent = Number(b.vague).toLocaleString();
           document.getElementById('imp-misc-base').textContent = Number(b.misclass).toLocaleString();
           document.getElementById('imp-quality-base').textContent = b.quality + '%';
+          document.getElementById('fb-baseline-vague').textContent = b.quality + '%';
           document.getElementById('imp-baseline-date').textContent = b.saved_at || '—';
 
           const curVague = allVague.length || Number(b.vague);
@@ -2630,8 +2631,7 @@
           document.getElementById('fb-impact-banner').style.display = 'none';
         }
 
-        // ── Learning Rate KPI (from verify-learning if available) ──
-        // Will be updated when loadVerifyTab runs
+        // ── Corrections per cycle bar chart ──
 
         // ── Corrections per cycle bar chart ──
         if (retrains > 0) {
@@ -2720,11 +2720,6 @@
 
         // If there are zero mistakes to test, we show N/A instead of 0% to avoid confusion
         const displayPct = total === 0 ? "—" : pct + "%";
-
-        // Update learning rate KPI
-        document.getElementById('fb-learning-rate').textContent = displayPct;
-        document.getElementById('fb-learning-rate').style.color = pct >= 70 ? 'var(--green)' : pct >= 40 ? 'var(--yellow)' : 'var(--red)';
-
         // Update summary badge
         const sumEl = document.getElementById('fb-learn-summary');
         if (sumEl) {
@@ -2929,7 +2924,22 @@
 
     function removeRow(i) {
       const r = document.getElementById('rv' + i);
-      if (r) { r.style.opacity = '.2'; r.style.transition = 'opacity .3s'; setTimeout(() => { r.remove(); updateReviewCount(); }, 300); }
+      if (r) {
+        r.style.opacity = '.2';
+        r.style.transition = 'opacity .3s';
+        setTimeout(() => {
+          r.remove();
+          // Also remove from global array so it won't show up in Feedback tab count
+          const actualIndex = reviewBatchStart + i;
+          if (allReview[actualIndex]) {
+            allReview.splice(actualIndex, 1);
+            // If the row was accepted/removed, adjust batch offset if necessary (though usually we just re-render)
+          }
+          updateReviewCount();
+          // Important: Sync the Feedback stats box too
+          refreshFeedbackStats();
+        }, 300);
+      }
     }
 
     function acceptRow(i) {
@@ -2982,14 +2992,18 @@
       }, 400);
     }
     function updateReviewCount() {
-      const inBatch = document.querySelectorAll('#review-body tr[id^=rv]').length;
-      const reviewed = (reviewBatchStart + (REVIEW_BATCH_SIZE - inBatch));
-      const totalRemaining = Math.max(0, allReview.length - reviewed);
+      const remaining = allReview ? allReview.length : 0;
       const batchNum = Math.floor(reviewBatchStart / REVIEW_BATCH_SIZE) + 1;
-      const totalBatches = Math.max(1, Math.ceil(totalRemaining / REVIEW_BATCH_SIZE));
-      document.getElementById('review-count').textContent = `${totalRemaining} remaining · Batch ${batchNum} of ${totalBatches}`;
-      document.getElementById('sb-review').textContent = totalRemaining;
-      // Auto-load next batch when current batch is empty
+      const totalBatches = Math.max(1, Math.ceil(remaining / REVIEW_BATCH_SIZE));
+
+      document.getElementById('review-count').textContent = `${remaining} remaining · Batch ${batchNum} of ${totalBatches}`;
+      document.getElementById('sb-review').textContent = remaining;
+
+      const fbRem = document.getElementById('fb-records-remaining');
+      if (fbRem) fbRem.textContent = remaining;
+
+      // Auto-load next batch if empty
+      const inBatch = document.querySelectorAll('#review-body tr[id^=rv]').length;
       if (inBatch === 0 && reviewBatchStart + REVIEW_BATCH_SIZE < allReview.length) {
         setTimeout(() => { loadNextBatch(); }, 600);
       }
