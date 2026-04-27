@@ -230,7 +230,7 @@ def known_corrections():
                 desc   = str(row.get("DESCRIPTION", "")).strip().lower()
                 grp    = str(row.get("MATERIAL_GROUP", "")).strip()
                 action = str(row.get("ACTION", "")).strip()
-                if desc and grp and grp in MATERIAL_GROUPS and action != "reject":
+                if desc and grp and grp in MATERIAL_GROUPS:
                     corrections[desc] = grp
     except Exception as e:
         print(f"Error reading feedback: {e}")
