@@ -1786,6 +1786,8 @@
                 <span style="font-size:11px;color:var(--green);font-family:var(--mono)" id="total-corrections">0
                   corrections submitted</span>
                 <button class="btn btn-ghost" style="font-size:11px" onclick="acceptAllReview()">✓ Accept All</button>
+                <button class="btn btn-ghost" style="font-size:11px;color:var(--red)" onclick="rejectAllReview()">✕
+                  Reject All</button>
               </div>
             </div>
             <table>
@@ -2057,23 +2059,7 @@
               </div>
             </div>
 
-            <div
-              style="padding:12px 18px;background:var(--surface2);display:flex;align-items:center;justify-content:space-between;margin-top:16px">
-              <div style="font-size:12px;font-weight:600;color:var(--text2)">📋 All Corrections Fed Into Model</div>
-              <span id="fb-corrections-count" style="font-size:11px;color:var(--text3);font-family:var(--mono)"></span>
-            </div>
-            <table>
-              <thead>
-                <tr>
-                  <th>Description</th>
-                  <th>Standardised To</th>
-                  <th>AI Had Suggested</th>
-                  <th>Action</th>
-                  <th>Time</th>
-                </tr>
-              </thead>
-              <tbody id="fb-table"></tbody>
-            </table>
+
           </div>
         </div>
       </div>
@@ -2679,7 +2665,7 @@
         csvRows.push([r.src, docNum, desc, origGrp, mlGrp, finGrp, conf, issue, plant, '"' + dept.replace(/"/g, '""') + '"'].join(','));
       });
 
-      const blob = new Blob([csvRows.join('\\n')], { type: 'text/csv;charset=utf-8;' });
+      const blob = new Blob([csvRows.join('\n')], { type: 'text/csv;charset=utf-8;' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -3110,6 +3096,15 @@
       reviewCurrentBatch.forEach((r, i) => {
         if (document.getElementById('rv' + i) && document.getElementById('rv' + i).style.opacity !== '0.5') {
           acceptRow(i);
+        }
+      });
+      setTimeout(() => { if (reviewBatchStart + REVIEW_BATCH_SIZE < allReview.length) loadNextBatch(); }, 1200);
+    }
+
+    function rejectAllReview() {
+      reviewCurrentBatch.forEach((r, i) => {
+        if (document.getElementById('rv' + i) && document.getElementById('rv' + i).style.opacity !== '0.5') {
+          rejectRow(i);
         }
       });
       setTimeout(() => { if (reviewBatchStart + REVIEW_BATCH_SIZE < allReview.length) loadNextBatch(); }, 1200);
