@@ -140,7 +140,7 @@ def classify():
                 "description": desc, "predicted": pred,
                 "group_name": MATERIAL_GROUPS.get(pred, pred),
                 "confidence": round(conf*100, 1),
-                "decision": "AUTO APPLY" if conf >= 0.85 else "REVIEW",
+                "decision": "AUTO APPLY" if conf >= 0.95 else "REVIEW",
                 "top3": [{"group": nlp_pipeline.classes_[j], "pct": round(float(prob[j])*100,1)} for j in top3_idx],
             })
     else:
@@ -150,7 +150,7 @@ def classify():
                 "description": desc, "predicted": grp,
                 "group_name": MATERIAL_GROUPS.get(grp, grp),
                 "confidence": round(conf*100, 1),
-                "decision": "AUTO APPLY" if conf >= 0.85 else "REVIEW",
+                "decision": "AUTO APPLY" if conf >= 0.95 else "REVIEW",
                 "top3": [{"group": grp, "pct": round(conf*100,1)}],
                 "note": "keyword-fallback",
             })
