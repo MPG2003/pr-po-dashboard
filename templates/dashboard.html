@@ -1536,6 +1536,9 @@
           </div>
           <button class="btn btn-primary" id="run-btn" onclick="runAnalysis()" disabled>▶ Analyse Data</button>
           <button class="btn btn-ghost" onclick="loadDemo()">⚡ Load Demo</button>
+          <button class="btn btn-ghost" id="export-after-btn" style="display:none;color:var(--blue)"
+            onclick="exportAnalyzedData()" title="Download the fully processed dataset with ML predictions">⬇ Export
+            Analyzed Data</button>
         </div>
         <div class="prog-wrap" id="prog-wrap">
           <div class="prog-header"><span id="prog-label">Initialising...</span><span id="prog-pct">0%</span></div>
@@ -2581,6 +2584,41 @@
     function renderReviewTable(data) { renderReviewBatch(); }
     // ── FEEDBACK LEARNING JS ──────────────────────────────────────────────
     // ── EXPORT / IMPORT ───────────────────────────────────────────────────
+    function exportAnalyzedData() {
+      if (!allAnalyzed || allAnalyzed.length === 0) {
+        toast('No analyzed data to export yet.', 'warn');
+        return;
+      }
+
+      // Select columns to export and map them
+      const headers = ['Source', 'Document Number', 'Description', 'Original SAP Group', 'ML Predicted Group', 'Final Assigned Group', 'AI Confidence %', 'Issue Flag', 'Plant', 'Dept/Vendor'];
+
+      const csvRows = [headers.join(',')];
+      allAnalyzed.forEach(r => {
+        const docNum = r.BANFN || r.EBELN || '';
+        const desc = '"' + String(r.TXZ01 || '').replace(/"/g, '""') + '"';
+        const origGrp = r.ORIG_MATGR || '';
+        const mlGrp = r.ML_GROUP || '';
+        const finGrp = r.MATGR || '';
+        const conf = r.ML_CONF ? r.ML_CONF.toFixed(1) + '%' : '';
+        const issue = r.issue || '';
+        const plant = r.WERKS || '';
+        const dept = r.AFNAM || r.LIFNR || '';
+
+        csvRows.push([r.src, docNum, desc, origGrp, mlGrp, finGrp, conf, issue, plant, '"' + dept.replace(/"/g, '""') + '"'].join(','));
+      });
+
+      const blob = new Blob([csvRows.join('\\n')], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'analyzed_pr_po_data.csv';
+      a.click();
+      URL.revokeObjectURL(url);
+      toast('✓ Downloaded fully processed dataset', 'ok');
+    }
+
+
     async function exportFeedback() {
       try {
         const resp = await fetch('/api/feedback/export');

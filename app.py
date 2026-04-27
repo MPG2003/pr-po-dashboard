@@ -70,7 +70,12 @@ count_existing_feedback()
 # ── Page ──────────────────────────────────────────────────────
 @app.route("/")
 def index():
-    return send_file("templates/dashboard.html")
+    from flask import make_response
+    response = make_response(send_file("templates/dashboard.html"))
+    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+    return response
 
 # ── API: Chat via Groq ────────────────────────────────────────
 @app.route("/api/chat", methods=["POST"])
