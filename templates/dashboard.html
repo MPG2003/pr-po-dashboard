@@ -2259,6 +2259,7 @@
         // Use ML predicted group if available and confident, else keep original
         const mlGrp = ml && ml.confidence >= 70 ? ml.predicted : null;
         let grp = mlGrp || r.MATGR || r.Predicted || r.predicted || '';
+        const origGrp = r.MATGR || r.Predicted || r.predicted || '';
         const known = knownCorrections[txt.toLowerCase().trim()];
         const isHighlyConfident = ml && ml.confidence >= 98 && known;
         let issue, correct;
