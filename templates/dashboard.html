@@ -2394,9 +2394,9 @@
     // ── INSIGHTS ─────────────────────────────────────────────────────────
     function buildInsights(eban, ekpo, all, vague, misc, blank, quality) {
       const total = all.length;
-      const deptVague = {};
-      eban.filter(r => r.issue === 'vague').forEach(r => { deptVague[r.AFNAM] = (deptVague[r.AFNAM] || 0) + 1; });
-      const worstDept = Object.entries(deptVague).sort((a, b) => b[1] - a[1])[0];
+      const deptIssues = {};
+      eban.filter(r => r.issue === 'vague' || r.issue === 'misclass').forEach(r => { deptIssues[r.AFNAM] = (deptIssues[r.AFNAM] || 0) + 1; });
+      const worstDept = Object.entries(deptIssues).sort((a, b) => b[1] - a[1])[0];
       const mPairs = {};
       all.filter(r => r.issue === 'misclass').forEach(r => { const k = `${r.ORIG_MATGR}→${r.correct}`; mPairs[k] = (mPairs[k] || 0) + 1; });
       const topPair = Object.entries(mPairs).sort((a, b) => b[1] - a[1])[0];
@@ -2409,7 +2409,7 @@
         { type: vagueRate > 15 ? 'danger' : vagueRate > 10 ? 'warn' : 'good', tag: vagueRate > 15 ? 'HIGH RISK' : vagueRate > 10 ? 'WARNING' : 'ACCEPTABLE', title: `${vagueRate}% of descriptions are vague`, body: `${vague.toLocaleString()} records have no meaningful description. Industry best practice is under 5%.`, stat: `${vague.toLocaleString()} vague records found` },
         { type: misc > 100 ? 'danger' : misc > 30 ? 'warn' : misc > 0 ? 'warn' : 'good', tag: misc > 100 ? 'CRITICAL' : misc > 30 ? 'WARNING' : misc > 0 ? 'DETECTED' : 'NONE FOUND', title: `${misc.toLocaleString()} misclassified records detected`, body: `${misc.toLocaleString()} of ${total.toLocaleString()} records have a clearly wrong material group assignment.`, stat: `${miscRate}% of total records` },
         { type: qualLabel, tag: qualLabel === 'good' ? 'GOOD' : qualLabel === 'warn' ? 'MODERATE' : 'POOR', title: `Overall data quality: ${quality}%`, body: `${(total - vague - misc - blank).toLocaleString()} of ${total.toLocaleString()} records are clean and correctly classified.`, stat: quality + '% quality score' },
-        worstDept ? { type: 'warn', tag: 'DEPT INSIGHT', title: `${worstDept[0]} raises most vague PRs`, body: `The ${worstDept[0]} department has ${worstDept[1]} vague descriptions — highest of any department.`, stat: `${worstDept[1]} vague PRs from ${worstDept[0]}` } : null,
+        worstDept ? { type: 'warn', tag: 'DEPT INSIGHT', title: `${worstDept[0]} raises most issues`, body: `The ${worstDept[0]} department has ${worstDept[1]} total issues (vague + misclassified) — highest of any department.`, stat: `${worstDept[1]} total issues from ${worstDept[0]}` } : null,
         topPair ? { type: 'danger', tag: 'PATTERN FOUND', title: `Most common misclassification: ${topPair[0]}`, body: `${topPair[1]} records assigned to ${topPair[0].split('→')[0]} should actually be in ${topPair[0].split('→')[1]}.`, stat: `${topPair[1]} records with this pattern` } : null,
         peak ? { type: 'info', tag: 'TREND', title: `Peak procurement in ${peak[0]}`, body: `${peak[1]} records were raised in ${peak[0]}, the highest volume month.`, stat: `${peak[1]} records in peak month` } : null,
       ].filter(Boolean);
