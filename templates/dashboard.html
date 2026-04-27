@@ -3207,14 +3207,14 @@
       const groupLines = Object.entries(groupStats).map(([g, s]) => `${g}: ${s.total} total, ${s.clean} clean, ${s.vague} vague, ${s.misc} misclass`).join('\n');
 
       const mPairs = {};
-      allMisclass.forEach(r => { const k = `${r.MATGR}→${r.correct}`; mPairs[k] = (mPairs[k] || 0) + 1; });
+      allMisclass.forEach(r => { const k = `${r.ORIG_MATGR}→${r.correct}`; mPairs[k] = (mPairs[k] || 0) + 1; });
       const patternLines = Object.entries(mPairs).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([p, c]) => `${p}: ${c} records`).join('\n');
 
-      const misRows = allMisclass.slice(0, 50).map(r => `${r.src} | ${r.TXZ01} | ${r.MATGR}→${r.correct}`).join('\n');
-      const vagRows = allVague.slice(0, 50).map(r => `${r.src} | ${r.TXZ01} | ${r.MATGR}`).join('\n');
+      const misRows = allMisclass.slice(0, 50).map(r => `${r.src} | ${r.TXZ01} | ${r.ORIG_MATGR}→${r.correct}`).join('\n');
+      const vagRows = allVague.slice(0, 50).map(r => `${r.src} | ${r.TXZ01} | ${r.ORIG_MATGR || r.MATGR}`).join('\n');
 
       cachedContext = `You are a highly intelligent SAP MM Executive Analyst AI.
-CRITICAL INSTRUCTION: Analyze the provided data below and answer the user's question directly with concise, actionable insights. Do NOT output empty templates or skeleton responses. DO NOT use filler text. Synthesize the numbers into a meaningful business narrative.
+CRITICAL INSTRUCTION: Analyze the provided data below and answer the user's question with deep, technical, and analytical insights. Do NOT output empty templates. Write 3-4 paragraphs explaining WHY certain material groups are confused (e.g. why a 'bearing' might be put in ELEC instead of MECH based on vague descriptions). Use the sample records to provide concrete technical examples. Provide actionable data governance advice for the Procurement Manager.
 
 --- CURRENT PROCUREMENT DASHBOARD METRICS ---
 OVERALL KPIs:
