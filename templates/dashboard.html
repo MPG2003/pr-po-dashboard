@@ -2251,7 +2251,7 @@
       const ebanLen = (ebanData || []).length;
       const ekpoLen = (ekpoData || []).length;
       const totalCount = ebanLen + ekpoLen;
-      const threshold = totalCount > 100 ? 5 : 2;
+      const threshold = totalCount > 100 ? 3 : 2;
 
       const eban = (ebanData || []).map((r, idx) => {
         const txt = r.TXZ01 || r.Description || r.description || '';
