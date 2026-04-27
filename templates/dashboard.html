@@ -2383,6 +2383,7 @@
       buildFeedbackTable();
       document.getElementById('prog-wrap').style.display = 'none';
       document.getElementById('dashboard-data').style.display = 'block';
+      document.getElementById('export-after-btn').style.display = 'inline-block';
       ['misc-content', 'vague-content', 'review-content', 'insights-content'].forEach(id => {
         document.getElementById(id).style.display = 'block';
         const emp = id.replace('-content', '-empty');
