@@ -1813,9 +1813,15 @@
             <div class="kpi-sub">Still in review queue</div>
           </div>
           <div class="kpi" style="border-top:2px solid var(--green)">
-            <div class="kpi-val" style="color:var(--green)" id="fb-learning-rate">—</div>
-            <div class="kpi-label">Learning Rate</div>
-            <div class="kpi-sub">Corrections model learned</div>
+            <div class="kpi-val" style="color:var(--green);display:flex;align-items:baseline;gap:8px"
+              id="fb-baseline-stats">
+              <span id="fb-baseline-vague">—</span>
+              <button class="btn btn-ghost"
+                style="font-size:10px;padding:2px 6px;height:auto;border:1px solid var(--border)"
+                onclick="overwriteBaseline()">Set as Baseline</button>
+            </div>
+            <div class="kpi-label">Project Baseline</div>
+            <div class="kpi-sub" id="imp-baseline-date">Starting point snapshot</div>
           </div>
         </div>
 
@@ -2529,6 +2535,28 @@
           refreshFeedbackStats();
         });
       }
+    }
+
+    function overwriteBaseline() {
+      if (confirm('Overwriting the baseline will set the current numbers as the new "Week 1" starting point. Proceed?')) {
+        const total = allAnalyzed.length;
+        const clean = allAnalyzed.filter(r => r.issue === 'clean').length;
+        const vague = allAnalyzed.filter(r => r.issue === 'vague').length;
+        const misc = allAnalyzed.filter(r => r.issue === 'misclass').length;
+        const quality = Math.round(clean / total * 100);
+
+        saveBaseline(vague, misc, quality);
+        toast('✓ New baseline saved!', 'ok');
+        refreshFeedbackStats();
+      }
+    }
+
+    function saveBaseline(vague, misc, quality) {
+      fetch('/api/analysis/baseline', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ vague, misclass: misc, quality })
+      }).then(() => refreshFeedbackStats());
     }
 
     let correctionsPerCycle = [];
