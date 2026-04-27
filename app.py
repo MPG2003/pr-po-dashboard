@@ -293,6 +293,7 @@ def verify_learning():
                 "current_confidence": current_conf,
                 "correct_conf_now": correct_conf_now if nlp_pipeline else None,
                 "learned": current_pred == correct_grp,
+                "improving": (correct_conf_now or 0) > (original_conf or 0),
                 "timestamp": timestamp,
             })
         return jsonify({"results": results, "total_real_corrections": len(results)})
@@ -379,11 +380,11 @@ def retrain_model():
                 fb_df = pd.read_csv(FEEDBACK_PATH)[["DESCRIPTION", "MATERIAL_GROUP"]].dropna()
                 fb_df = fb_df[fb_df["MATERIAL_GROUP"].isin(MATERIAL_GROUPS.keys())]
                 if len(fb_df) > 0:
-                    fb_X = pd.concat([fb_df["DESCRIPTION"].str.lower()] * 5)
-                    fb_y = pd.concat([fb_df["MATERIAL_GROUP"]] * 5)
+                    fb_X = pd.concat([fb_df["DESCRIPTION"].str.lower()] * 20)
+                    fb_y = pd.concat([fb_df["MATERIAL_GROUP"]] * 20)
                     X_train = pd.concat([X_train_base, fb_X], ignore_index=True)
                     y_train = pd.concat([y_train_base, fb_y], ignore_index=True)
-                    print(f"  ✓ Added {len(fb_df)} feedback corrections (weighted 5x) to training only")
+                    print(f"  ✓ Added {len(fb_df)} feedback corrections (weighted 20x) to training only")
                 else:
                     X_train, y_train = X_train_base, y_train_base
             else:

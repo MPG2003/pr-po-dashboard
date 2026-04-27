@@ -2729,8 +2729,8 @@
               <span style="color:var(--text3)">${r.original_confidence != null ? confBefore : ''}</span>${confArrow}
             </td>
             <td>
-              <span style="font-size:12px;font-weight:700;padding:3px 10px;border-radius:4px;background:${r.learned ? 'var(--green-dim)' : 'var(--red-dim)'};color:${r.learned ? 'var(--green)' : 'var(--red)'}">
-                ${r.learned ? '✅ Learned' : '⏳ Pending'}
+              <span style="font-size:11px;font-weight:700;padding:3px 8px;border-radius:4px;background:${r.learned ? 'var(--green-dim)' : r.improving ? 'var(--blue-dim)' : 'var(--red-dim)'};color:${r.learned ? 'var(--green)' : r.improving ? 'var(--blue)' : 'var(--red)'}">
+                ${r.learned ? '✅ Learned' : r.improving ? '🔄 Refining' : '⏳ Pending'}
               </span>
             </td>
           </tr>`;
