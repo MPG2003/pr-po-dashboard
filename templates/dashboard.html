@@ -1755,7 +1755,31 @@
         <div id="review-content" style="display:none">
           <div class="table-card">
             <div class="tc-header">
-              <div class="tc-title">Flagged for Analyst Review</div>
+              <div class="tc-title">Flagged for Analyst Review
+                <div id="review-extra-filters"
+                  style="margin-top:12px;display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+                  <select id="review-sort" onchange="setReviewSort(this.value)"
+                    style="font-size:10px;padding:4px;border:1px solid var(--border);border-radius:4px;background:var(--surface2);color:var(--text);outline:none">
+                    <option value="DEFAULT">Sort: Original</option>
+                    <option value="CONF_HIGH">Sort: ML Confidence (High to Low)</option>
+                    <option value="CONF_LOW">Sort: ML Confidence (Low to High)</option>
+                  </select>
+                  <div id="review-src-filters" style="display:flex;gap:4px">
+                    <button onclick="setReviewSrc('ALL')" id="btn-src-ALL"
+                      style="font-size:10px;padding:4px 8px;border-radius:4px;cursor:pointer;border:1px solid var(--border);background:var(--blue);color:#fff">All
+                      Sources</button>
+                    <button onclick="setReviewSrc('EBAN')" id="btn-src-EBAN"
+                      style="font-size:10px;padding:4px 8px;border-radius:4px;cursor:pointer;border:1px solid var(--border);background:transparent;color:var(--text2)">EBAN
+                      Only</button>
+                    <button onclick="setReviewSrc('EKPO')" id="btn-src-EKPO"
+                      style="font-size:10px;padding:4px 8px;border-radius:4px;cursor:pointer;border:1px solid var(--border);background:transparent;color:var(--text2)">EKPO
+                      Only</button>
+                  </div>
+                </div>
+                <div id="review-filters" style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">
+                  <!-- JS will dynamically populate filter pills here -->
+                </div>
+              </div>
               <div style="display:flex;align-items:center;gap:8px">
                 <span style="font-size:11px;color:var(--yellow);font-family:var(--mono)" id="review-count">—
                   remaining</span>
@@ -2072,6 +2096,10 @@
 
     // ── STATE ────────────────────────────────────────────────────────────
     let ebanData = null, ekpoData = null;
+    let reviewFilterGroup = 'ALL';
+    let reviewFilterSource = 'ALL';
+    let reviewSortOrder = 'DEFAULT';
+    let reviewCurrentBatch = [];
     let allMisclass = [], allVague = [], allReview = [], allAnalyzed = [];
     let reviewBatchStart = 0;
     const REVIEW_BATCH_SIZE = 30;
@@ -2493,25 +2521,67 @@
       document.getElementById('vague-count').textContent = `Showing ${data.length} records`;
       document.getElementById('vague-body').innerHTML = data.map(r => `<tr><td><span class="tag ${r.src === 'EBAN' ? 'src-eban' : 'src-ekpo'}">${r.src}</span></td><td class="td-mono">${r.BANFN || r.EBELN || '—'}</td><td><span style="color:var(--yellow);font-size:12px">"${r.TXZ01 || '—'}"</span></td><td>${gTag(r.MATGR)}</td><td style="font-size:11px">${r.AFNAM || r.LIFNR || '—'}</td><td class="td-mono">${r.WERKS || '—'}</td></tr>`).join('') || '<tr><td colspan="6" style="text-align:center;color:var(--text3);padding:24px">No records</td></tr>';
     }
+    function setReviewSort(order) { reviewSortOrder = order; reviewBatchStart = 0; renderReviewBatch(); }
+    function setReviewSrc(src) {
+      reviewFilterSource = src;
+      ['ALL', 'EBAN', 'EKPO'].forEach(s => {
+        document.getElementById('btn-src-' + s).style.background = s === src ? 'var(--blue)' : 'transparent';
+        document.getElementById('btn-src-' + s).style.color = s === src ? '#fff' : 'var(--text2)';
+      });
+      reviewBatchStart = 0; renderReviewBatch();
+    }
+
+    function setReviewFilter(grp) {
+      reviewFilterGroup = grp;
+      reviewBatchStart = 0;
+      renderReviewBatch();
+    }
+
     function renderReviewBatch() {
-      const unreviewedAll = allReview.filter(r => !r._reviewed);
+      let unreviewedAll = allReview.filter(r => !r._reviewed);
+
+      // Source Filter
+      if (reviewFilterSource !== 'ALL') {
+        unreviewedAll = unreviewedAll.filter(r => r.src === reviewFilterSource);
+      }
+
+      // Material Group Filter
+      if (reviewFilterGroup !== 'ALL') {
+        unreviewedAll = unreviewedAll.filter(r => {
+          const sug = r.ML_GROUP || AI_SUGGEST[String(r.TXZ01 || '').toLowerCase().trim()] || r.MATGR;
+          return sug === reviewFilterGroup;
+        });
+      }
+
+      // Sorting (Linear, No Grouping)
+      if (reviewSortOrder === 'CONF_HIGH') unreviewedAll.sort((a, b) => (b.ML_CONF || 0) - (a.ML_CONF || 0));
+      else if (reviewSortOrder === 'CONF_LOW') unreviewedAll.sort((a, b) => (a.ML_CONF || 0) - (b.ML_CONF || 0));
+
       const total = unreviewedAll.length;
-      const batch = unreviewedAll.slice(reviewBatchStart, reviewBatchStart + REVIEW_BATCH_SIZE);
+      reviewCurrentBatch = unreviewedAll.slice(reviewBatchStart, reviewBatchStart + REVIEW_BATCH_SIZE);
       const remaining = total - reviewBatchStart;
       const totalBatches = Math.ceil(total / REVIEW_BATCH_SIZE) || 1;
       const sessionBatchNum = Math.floor(reviewBatchStart / REVIEW_BATCH_SIZE) + 1;
 
       document.getElementById('review-count').textContent = `${remaining} remaining · Batch ${sessionBatchNum} of ${totalBatches}`;
-      document.getElementById('sb-review').textContent = total;
+      document.getElementById('sb-review').textContent = allReview.filter(r => !r._reviewed).length; // Keep sidebar global
 
-      document.getElementById('review-body').innerHTML = batch.map((r, i) => {
-        if (r._reviewed) return ''; // skip reviewed items
-        // Use ML_GROUP (from real ML model) as primary suggestion, fallback to AI_SUGGEST
+      // Render the Filter Pills
+      let filterHtml = `<button onclick="setReviewFilter('ALL')" style="font-size:10px;padding:4px 8px;border-radius:4px;cursor:pointer;border:1px solid var(--border);background:${reviewFilterGroup === 'ALL' ? 'var(--blue)' : 'transparent'};color:${reviewFilterGroup === 'ALL' ? '#fff' : 'var(--text2)'}">ALL</button>`;
+      GROUPS.forEach(g => {
+        const count = allReview.filter(r => !r._reviewed && (reviewFilterSource === 'ALL' || r.src === reviewFilterSource) && (r.ML_GROUP || AI_SUGGEST[String(r.TXZ01 || '').toLowerCase().trim()] || r.MATGR) === g).length;
+        if (count > 0) {
+          filterHtml += `<button onclick="setReviewFilter('${g}')" style="font-size:10px;padding:4px 8px;border-radius:4px;cursor:pointer;border:1px solid var(--border);background:${reviewFilterGroup === g ? 'var(--blue)' : 'transparent'};color:${reviewFilterGroup === g ? '#fff' : 'var(--text2)'}">${g} (${count})</button>`;
+        }
+      });
+      document.getElementById('review-filters').innerHTML = filterHtml;
+
+      document.getElementById('review-body').innerHTML = reviewCurrentBatch.map((r, i) => {
         const sug = r.ML_GROUP || AI_SUGGEST[String(r.TXZ01 || '').toLowerCase().trim()] || r.MATGR;
         const mlConf = r.ML_CONF ? r.ML_CONF.toFixed(1) + '%' : '';
         const consensusHtml = r.consensus_progress ?
           `<div style="font-size:9px;color:var(--text3);margin-top:2px">Consensus: <span style="color:var(--blue)">${r.consensus_progress}</span> reviews</div>` : '';
-        const opts = GROUPS.map(g => `<option value="${g}" ${g === sug ? 'selected' : ''}>${g} — ${GN[g] || g}</option>`).join('');
+        const opts = GROUPS.map(grp => `<option value="${grp}" ${grp === sug ? 'selected' : ''}>${grp} — ${GN[grp] || grp}</option>`).join('');
 
         // Show top3 ML suggestions if available
         const top3Html = r.top3 && r.top3.length > 1 ?
@@ -2525,7 +2595,7 @@
         return `<tr id="rv${i}">
           <td><span class="tag ${r.src === 'EBAN' ? 'src-eban' : 'src-ekpo'}">${r.src}</span></td>
           <td class="td-mono">${r.BANFN || r.EBELN || '—'}</td>
-          <td style="color:var(--yellow);font-size:12px">"${r.TXZ01 || '—'}"</td>
+          <td><span style="color:var(--yellow);font-size:12px">"${r.TXZ01 || '—'}"</span></td>
           <td id="rv-sug-${i}" data-grp="${sug}">
             ${gTag(sug)}
             ${mlConf ? `<span style="font-size:9px;color:var(--text3);font-family:var(--mono);margin-left:3px">${mlConf}</span>` : ''}
@@ -2992,8 +3062,11 @@
       if (!document.getElementById('rv' + idx)) return;
       document.getElementById('rv' + idx).style.opacity = '0.5';
       document.getElementById('rv' + idx).style.pointerEvents = 'none';
-      const r = allReview[reviewBatchStart + idx];
+      const r = reviewCurrentBatch[idx];
       const sug = document.getElementById('rv-sug-' + idx).dataset.grp;
+
+      r._reviewed = true;
+      r.MATGR = sug;
       sendFeedback(r.TXZ01, sug, r.ORIG_MATGR || r.MATGR, 'accept');
     }
 
@@ -3011,27 +3084,30 @@
       if (!document.getElementById('rv' + idx)) return;
       document.getElementById('rv' + idx).style.opacity = '0.5';
       document.getElementById('rv' + idx).style.pointerEvents = 'none';
-      const r = allReview[reviewBatchStart + idx];
+      const r = reviewCurrentBatch[idx];
       const newGrp = document.getElementById('rv-sel-' + idx).value;
+
+      r._reviewed = true;
+      r.MATGR = newGrp;
+
       sendFeedback(r.TXZ01, newGrp, r.ORIG_MATGR || r.MATGR, 'edit');
 
-      // Update UI suggestion then remove after brief delay
       const sugEl = document.getElementById('rv-sug-' + idx);
       if (sugEl) sugEl.innerHTML = gTag(newGrp);
-
-      removeRowFromUI(idx);
     }
 
     function rejectRow(idx) {
       if (!document.getElementById('rv' + idx)) return;
       document.getElementById('rv' + idx).style.opacity = '0.5';
       document.getElementById('rv' + idx).style.pointerEvents = 'none';
-      const r = allReview[reviewBatchStart + idx];
+      const r = reviewCurrentBatch[idx];
+
+      r._reviewed = true;
       sendFeedback(r.TXZ01, r.ORIG_MATGR || r.MATGR, r.ORIG_MATGR || r.MATGR, 'reject');
     }
+
     function acceptAllReview() {
-      const batch = allReview.slice(reviewBatchStart, reviewBatchStart + REVIEW_BATCH_SIZE);
-      batch.forEach((r, i) => {
+      reviewCurrentBatch.forEach((r, i) => {
         if (document.getElementById('rv' + i) && document.getElementById('rv' + i).style.opacity !== '0.5') {
           acceptRow(i);
         }
