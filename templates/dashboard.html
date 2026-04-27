@@ -2368,9 +2368,7 @@
       allMisclass = all.filter(r => r.issue === 'misclass');
       allVague = all.filter(r => r.issue === 'vague');
       allVague = all.filter(r => r.issue === 'vague');
-      // FIX: include BOTH vague AND misclassified in review queue so analysts
-      // always have work to do and the feedback loop keeps running
-      allReview = [...allVague, ...allMisclass];
+      allReview = allVague;
 
       reviewBatchStart = 0;
       document.getElementById('sb-review').textContent = allReview.length;
