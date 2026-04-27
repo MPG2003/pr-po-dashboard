@@ -221,20 +221,25 @@ def save_baseline():
 @app.route("/api/known-corrections", methods=["GET"])
 def known_corrections():
     corrections = {}
-    if not os.path.exists(FEEDBACK_PATH):
-        return jsonify({"corrections": {}, "total": 0})
+    total_raw = 0
     try:
-        with open(FEEDBACK_PATH, newline="", encoding="utf-8") as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                desc   = str(row.get("DESCRIPTION", "")).strip().lower()
-                grp    = str(row.get("MATERIAL_GROUP", "")).strip()
-                action = str(row.get("ACTION", "")).strip()
-                if desc and grp and grp in MATERIAL_GROUPS:
-                    corrections[desc] = grp
+        if os.path.exists(FEEDBACK_PATH):
+            with open(FEEDBACK_PATH, newline="", encoding="utf-8") as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    total_raw += 1
+                    desc = str(row.get("DESCRIPTION", "")).strip().lower()
+                    grp = str(row.get("MATERIAL_GROUP", "")).strip()
+                    if desc and grp:
+                        if desc not in corrections:
+                            corrections[desc] = {"grp": grp, "count": 1}
+                        else:
+                            # Use latest group, but increment count
+                            corrections[desc]["grp"] = grp
+                            corrections[desc]["count"] += 1
     except Exception as e:
         print(f"Error reading feedback: {e}")
-    return jsonify({"corrections": corrections, "total": len(corrections)})
+    return jsonify({"corrections": corrections, "total": len(corrections), "total_raw": total_raw})
 
 # ── API: Reset feedback ───────────────────────────────────────
 @app.route("/api/feedback/reset", methods=["POST"])

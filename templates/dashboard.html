@@ -2256,15 +2256,18 @@
         // Use ML predicted group if available and confident, else keep original
         const mlGrp = ml && ml.confidence >= 70 ? ml.predicted : null;
         const grp = mlGrp || r.MATGR || r.Predicted || r.predicted || '';
-        // Use ML to detect misclassification: if ML says different group with high confidence
-        let issue, correct;
-        const origGrp = r.MATGR || r.Predicted || r.predicted || '';
-        const c = classifyRow(txt, origGrp);
-        const knownGrp = knownCorrections[txt.toLowerCase().trim()];
-        if (knownGrp) {
+        const threshold = all.length > 100 ? 5 : 2;
+        const known = knownCorrections[txt.toLowerCase().trim()];
+        const isHighlyConfident = ml && ml.confidence >= 98 && known;
+
+        if (known && (known.count >= threshold || isHighlyConfident)) {
           issue = 'clean'; correct = null;
+          grp = known.grp; // Auto-apply historical correction
         } else if (c.issue === 'blank') { issue = 'blank'; correct = null; }
-        else if (c.issue === 'vague') { issue = 'vague'; correct = null; }
+        else if (c.issue === 'vague') {
+          issue = 'vague'; correct = null;
+          r.consensus_progress = known ? `${known.count}/${threshold}` : `0/${threshold}`;
+        }
         else if (ml && ml.confidence >= 85 && ml.predicted.trim() !== origGrp.trim() && origGrp.trim()) { issue = 'misclass'; correct = ml.predicted; }
         else { issue = 'clean'; correct = null; }
         let dept = r.AFNAM || r.DEPARTMENT || r.department || '—';
@@ -2278,13 +2281,18 @@
         const mlGrp = ml && ml.confidence >= 70 ? ml.predicted : null;
         const grp = mlGrp || r.MATGR || r.Predicted || r.predicted || '';
         const origGrp = r.MATGR || r.Predicted || r.predicted || '';
-        let issue, correct;
-        const c = classifyRow(txt, origGrp);
-        const knownGrpEkpo = knownCorrections[txt.toLowerCase().trim()];
-        if (knownGrpEkpo) {
+        const threshold = all.length > 100 ? 5 : 2;
+        const knownEk = knownCorrections[txt.toLowerCase().trim()];
+        const isHighlyConfidentEk = ml && ml.confidence >= 98 && knownEk;
+
+        if (knownEk && (knownEk.count >= threshold || isHighlyConfidentEk)) {
           issue = 'clean'; correct = null;
+          grp = knownEk.grp;
         } else if (c.issue === 'blank') { issue = 'blank'; correct = null; }
-        else if (c.issue === 'vague') { issue = 'vague'; correct = null; }
+        else if (c.issue === 'vague') {
+          issue = 'vague'; correct = null;
+          r.consensus_progress = knownEk ? `${knownEk.count}/${threshold}` : `0/${threshold}`;
+        }
         else if (ml && ml.confidence >= 85 && ml.predicted.trim() !== origGrp.trim() && origGrp.trim()) { issue = 'misclass'; correct = ml.predicted; }
         else { issue = 'clean'; correct = null; }
         let vendor = r.LIFNR || r.VENDOR || r.vendor || r.DEPARTMENT || r.department || '—';
@@ -2448,6 +2456,8 @@
         // Use ML_GROUP (from real ML model) as primary suggestion, fallback to AI_SUGGEST
         const sug = r.ML_GROUP || AI_SUGGEST[String(r.TXZ01 || '').toLowerCase().trim()] || r.MATGR;
         const mlConf = r.ML_CONF ? r.ML_CONF.toFixed(1) + '%' : '';
+        const consensusHtml = r.consensus_progress ?
+          `<div style="font-size:9px;color:var(--text3);margin-top:2px">Consensus: <span style="color:var(--blue)">${r.consensus_progress}</span> reviews</div>` : '';
         const opts = GROUPS.map(g => `<option value="${g}" ${g === sug ? 'selected' : ''}>${g} — ${GN[g] || g}</option>`).join('');
 
         // Show top3 ML suggestions if available
@@ -2466,6 +2476,7 @@
           <td id="rv-sug-${i}" data-grp="${sug}">
             ${gTag(sug)}
             ${mlConf ? `<span style="font-size:9px;color:var(--text3);font-family:var(--mono);margin-left:3px">${mlConf}</span>` : ''}
+            ${consensusHtml}
             ${top3Html}
           </td>
           <td style="font-size:11px">${r.AFNAM || r.LIFNR || '—'}</td>
