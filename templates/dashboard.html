@@ -1878,7 +1878,7 @@
               <div
                 style="font-size:10px;color:var(--text2);margin-bottom:6px;text-transform:uppercase;letter-spacing:.06em">
                 Baseline Date</div>
-              <div style="font-size:13px;font-weight:600;color:var(--text);margin-top:8px" id="imp-baseline-date">—
+              <div style="font-size:13px;font-weight:600;color:var(--text);margin-top:8px" id="imp-baseline-date-val">—
               </div>
               <div style="font-size:10px;color:var(--text2);margin-top:4px">First analysis snapshot</div>
             </div>
@@ -2614,7 +2614,9 @@
           document.getElementById('imp-misc-base').textContent = Number(b.misclass).toLocaleString();
           document.getElementById('imp-quality-base').textContent = b.quality + '%';
           document.getElementById('fb-baseline-vague').textContent = b.quality + '%';
-          document.getElementById('imp-baseline-date').textContent = b.saved_at || '—';
+          const baseDate = b.saved_at || '—';
+          if (document.getElementById('imp-baseline-date')) document.getElementById('imp-baseline-date').textContent = baseDate;
+          if (document.getElementById('imp-baseline-date-val')) document.getElementById('imp-baseline-date-val').textContent = baseDate;
 
           const curVague = allVague.length || Number(b.vague);
           const curMisc = allMisclass.length || Number(b.misclass);
