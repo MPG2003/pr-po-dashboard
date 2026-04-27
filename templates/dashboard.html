@@ -2263,7 +2263,7 @@
           if (c.issue === 'blank') { issue = 'blank'; correct = null; }
           else if (c.issue === 'vague') {
             // If ML is now very confident in a group, it's no longer vague!
-            if (ml && ml.confidence >= 85) { issue = 'clean'; correct = null; }
+            if (ml && ml.confidence >= 98) { issue = 'clean'; correct = null; }
             else { issue = 'vague'; correct = null; }
           }
           else if (ml.confidence >= 85 && ml.predicted.trim() !== origGrp.trim() && origGrp.trim()) { issue = 'misclass'; correct = ml.predicted; }
