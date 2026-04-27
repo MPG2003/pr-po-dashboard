@@ -1788,11 +1788,27 @@
             <div class="page-sub">Analyst corrections continuously improve the NLP model — tracked, measurable, provable
             </div>
           </div>
-          <div style="display:flex;gap:8px">
+          <div style="display:flex;gap:8px;align-items:center">
             <button class="btn btn-ghost" style="font-size:12px" onclick="refreshFeedbackStats()">↻ Refresh</button>
+            <button class="btn btn-ghost" style="font-size:12px;color:var(--green)" onclick="exportFeedback()"
+              title="Download feedback.csv to your computer">⬇ Export</button>
+            <label class="btn btn-ghost" style="font-size:12px;color:var(--blue);cursor:pointer"
+              title="Restore a previously exported feedback.csv">
+              ⬆ Import
+              <input type="file" id="import-file" accept=".csv" style="display:none" onchange="importFeedback(this)">
+            </label>
             <button class="btn btn-ghost" style="font-size:12px;color:var(--red)" onclick="confirmResetFeedback()">⊘
               Reset</button>
           </div>
+        </div>
+
+        <!-- Persistence reminder banner -->
+        <div
+          style="display:flex;align-items:center;gap:10px;background:var(--yellow-dim);border:1px solid rgba(210,153,34,.25);border-radius:var(--r);padding:10px 16px;margin-bottom:20px;font-size:12px;color:var(--yellow)">
+          <span style="font-size:14px">⚠</span>
+          <span><strong>Before redeploying:</strong> click <strong>⬇ Export</strong> to save your corrections locally.
+            After deploy, use <strong>⬆ Import</strong> to restore them. This protects your data until a persistent
+            volume is available.</span>
         </div>
 
         <!-- KPI Row -->
@@ -2286,7 +2302,7 @@
         let grp = mlGrp || r.MATGR || r.Predicted || r.predicted || '';
         const origGrp = r.MATGR || r.Predicted || r.predicted || '';
         const known = knownCorrections[txt.toLowerCase().trim()];
-        const isHighlyConfident = ml && ml.confidence >= 98 && known;
+        const isHighlyConfident = ml && ml.confidence >= 99 && known;
         let issue, correct;
         const c = classifyRow(txt, origGrp);
 
@@ -2298,7 +2314,7 @@
           issue = 'vague'; correct = null;
           r.consensus_progress = known ? `${known.count}/${threshold}` : `0/${threshold}`;
         }
-        else if (ml && ml.confidence >= 85 && ml.predicted.trim() !== origGrp.trim() && origGrp.trim()) { issue = 'misclass'; correct = ml.predicted; }
+        else if (ml && ml.confidence >= 95 && ml.predicted.trim() !== origGrp.trim() && origGrp.trim()) { issue = 'misclass'; correct = ml.predicted; }
         else { issue = 'clean'; correct = null; }
         let dept = r.AFNAM || r.DEPARTMENT || r.department || '—';
         if (dept === '—' || dept === '-') dept = 'External Vendor';
@@ -2311,7 +2327,7 @@
         const mlGrp = ml && ml.confidence >= 70 ? ml.predicted : null;
         let grp = mlGrp || r.MATGR || r.Predicted || r.predicted || '';
         const knownEk = knownCorrections[txt.toLowerCase().trim()];
-        const isHighlyConfidentEk = ml && ml.confidence >= 98 && knownEk;
+        const isHighlyConfidentEk = ml && ml.confidence >= 99 && knownEk;
         const origGrp = r.MATGR || r.Predicted || r.predicted || '';
         let issue, correct;
         const c = classifyRow(txt, origGrp);
@@ -2324,7 +2340,7 @@
           issue = 'vague'; correct = null;
           r.consensus_progress = knownEk ? `${knownEk.count}/${threshold}` : `0/${threshold}`;
         }
-        else if (ml && ml.confidence >= 85 && ml.predicted.trim() !== origGrp.trim() && origGrp.trim()) { issue = 'misclass'; correct = ml.predicted; }
+        else if (ml && ml.confidence >= 95 && ml.predicted.trim() !== origGrp.trim() && origGrp.trim()) { issue = 'misclass'; correct = ml.predicted; }
         else { issue = 'clean'; correct = null; }
         let vendor = r.LIFNR || r.VENDOR || r.vendor || r.DEPARTMENT || r.department || '—';
         if (vendor === '—' || vendor === '-') vendor = 'External Vendor';
@@ -2352,7 +2368,9 @@
       allMisclass = all.filter(r => r.issue === 'misclass');
       allVague = all.filter(r => r.issue === 'vague');
       allVague = all.filter(r => r.issue === 'vague');
-      allReview = allVague;
+      // FIX: include BOTH vague AND misclassified in review queue so analysts
+      // always have work to do and the feedback loop keeps running
+      allReview = [...allVague, ...allMisclass];
 
       reviewBatchStart = 0;
       document.getElementById('sb-review').textContent = allReview.length;
@@ -2564,6 +2582,46 @@
 
     function renderReviewTable(data) { renderReviewBatch(); }
     // ── FEEDBACK LEARNING JS ──────────────────────────────────────────────
+    // ── EXPORT / IMPORT ───────────────────────────────────────────────────
+    async function exportFeedback() {
+      try {
+        const resp = await fetch('/api/feedback/export');
+        if (resp.status === 404) { toast('No corrections to export yet', 'warn'); return; }
+        if (!resp.ok) { toast('Export failed', 'warn'); return; }
+        const blob = await resp.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'feedback_' + new Date().toISOString().slice(0, 10) + '.csv';
+        a.click();
+        URL.revokeObjectURL(url);
+        toast('✓ feedback.csv downloaded — keep this file safe!', 'ok');
+      } catch (e) { toast('Export error: ' + e.message, 'warn'); }
+    }
+
+    async function importFeedback(input) {
+      const file = input.files[0];
+      if (!file) return;
+      if (!confirm(`Import "${file.name}"? This will REPLACE your current corrections on the server. Make sure you exported first.`)) {
+        input.value = ''; return;
+      }
+      try {
+        const formData = new FormData();
+        formData.append('file', file);
+        const resp = await fetch('/api/feedback/import', { method: 'POST', body: formData });
+        const data = await resp.json();
+        if (data.imported) {
+          toast(`✓ Imported ${data.total_corrections} corrections successfully!`, 'ok');
+          refreshFeedbackStats();
+        } else {
+          toast('Import failed: ' + (data.error || 'unknown error'), 'warn');
+        }
+      } catch (e) {
+        toast('Import error: ' + e.message, 'warn');
+      }
+      input.value = '';
+    }
+
     function confirmResetFeedback() {
       if (confirm('Reset all feedback data and baseline? This cannot be undone.')) {
         fetch('/api/feedback/reset', { method: 'POST' }).then(() => {
@@ -2748,6 +2806,11 @@
       document.getElementById('verify-table').style.display = 'none';
       try {
         const resp = await fetch('/api/verify-learning');
+        // Guard: if server returns HTML (error page) instead of JSON, fail gracefully
+        const contentType = resp.headers.get('content-type') || '';
+        if (!resp.ok || !contentType.includes('application/json')) {
+          throw new Error(`Server returned ${resp.status} — expected JSON, got ${contentType}`);
+        }
         const data = await resp.json();
         document.getElementById('verify-loading').style.display = 'none';
 
@@ -2890,17 +2953,11 @@
     // ── REVIEW ACTIONS ────────────────────────────────────────────────────
     function acceptRow(idx) {
       if (!document.getElementById('rv' + idx)) return;
-      const unreviewed = allReview.filter(r => !r._reviewed);
-      const actualIndex = reviewBatchStart + idx;
-      const r = unreviewed[actualIndex];
-      if (!r) return;
-
-      r._reviewed = true;
-      const sugEl = document.getElementById('rv-sug-' + idx);
-      const sugGrp = sugEl ? sugEl.dataset.grp || r.MATGR : r.MATGR;
-
-      sendFeedback(r.TXZ01, sugGrp, r.ORIG_MATGR || r.MATGR, 'accept');
-      removeRowFromUI(idx);
+      document.getElementById('rv' + idx).style.opacity = '0.5';
+      document.getElementById('rv' + idx).style.pointerEvents = 'none';
+      const r = allReview[reviewBatchStart + idx];
+      const sug = document.getElementById('rv-sug-' + idx).dataset.grp;
+      sendFeedback(r.TXZ01, sug, r.ORIG_MATGR || r.MATGR, 'accept');
     }
 
     function editRow(idx) {
@@ -2915,12 +2972,9 @@
 
     function saveEdit(idx) {
       if (!document.getElementById('rv' + idx)) return;
-      const unreviewed = allReview.filter(r => !r._reviewed);
-      const actualIndex = reviewBatchStart + idx;
-      const r = unreviewed[actualIndex];
-      if (!r) return;
-
-      r._reviewed = true;
+      document.getElementById('rv' + idx).style.opacity = '0.5';
+      document.getElementById('rv' + idx).style.pointerEvents = 'none';
+      const r = allReview[reviewBatchStart + idx];
       const newGrp = document.getElementById('rv-sel-' + idx).value;
       sendFeedback(r.TXZ01, newGrp, r.ORIG_MATGR || r.MATGR, 'edit');
 
@@ -2933,67 +2987,20 @@
 
     function rejectRow(idx) {
       if (!document.getElementById('rv' + idx)) return;
-      const unreviewed = allReview.filter(r => !r._reviewed);
-      const actualIndex = reviewBatchStart + idx;
-      const r = unreviewed[actualIndex];
-      if (!r) return;
-
-      r._reviewed = true;
-      // When rejecting, we keep the original group but mark as 'reject'
+      document.getElementById('rv' + idx).style.opacity = '0.5';
+      document.getElementById('rv' + idx).style.pointerEvents = 'none';
+      const r = allReview[reviewBatchStart + idx];
       sendFeedback(r.TXZ01, r.ORIG_MATGR || r.MATGR, r.ORIG_MATGR || r.MATGR, 'reject');
-      removeRowFromUI(idx);
-      toast('✕ Item discarded from model learning', 'warn');
     }
-
-    function removeRowFromUI(idx) {
-      const rowEl = document.getElementById('rv' + idx);
-      if (rowEl) {
-        rowEl.style.opacity = '0.3';
-        rowEl.style.pointerEvents = 'none';
-        rowEl.style.transition = 'opacity .3s';
-
-        setTimeout(() => {
-          rowEl.style.display = 'none'; // Hide instead of completely removing to preserve indices until re-render
-
-          // Count remaining visible items in this batch
-          const visible = Array.from(document.querySelectorAll('#review-body tr[id^=rv]'))
-            .filter(r => r.style.display !== 'none').length;
-
-          if (visible === 0 && reviewBatchStart + REVIEW_BATCH_SIZE < allReview.length) {
-            loadNextBatch();
-          }
-
-          refreshFeedbackStats();
-        }, 400);
-      }
-    }
-
     function acceptAllReview() {
-      const batchRows = document.querySelectorAll('#review-body tr[id^=rv]');
-      let count = 0;
-      batchRows.forEach((row, i) => {
-        if (row.style.display !== 'none' && row.style.opacity !== '0.3') {
+      const batch = allReview.slice(reviewBatchStart, reviewBatchStart + REVIEW_BATCH_SIZE);
+      batch.forEach((r, i) => {
+        if (document.getElementById('rv' + i) && document.getElementById('rv' + i).style.opacity !== '0.5') {
           acceptRow(i);
-          count++;
         }
       });
-
-      if (count > 0) {
-        toast(`✓ Accepting ${count} records...`, 'ok');
-        setTimeout(() => {
-          if (reviewBatchStart < allReview.length) {
-            renderReviewBatch();
-          }
-        }, 1200);
-      }
+      setTimeout(() => { if (reviewBatchStart + REVIEW_BATCH_SIZE < allReview.length) loadNextBatch(); }, 1200);
     }
-
-    function updateReviewCount() {
-      const remaining = allReview ? allReview.length : 0; // This doesn't account for removed items yet
-      // For simplicity, we'll just re-render or let refreshFeedbackStats handle it
-      document.getElementById('sb-review').textContent = document.querySelectorAll('.ra-accept').length;
-    }
-
     // ── FEEDBACK API ─────────────────────────────────────────────────────
     async function sendFeedback(description, correctGroup, wrongGroup, action) {
       try {

@@ -22,10 +22,21 @@ GROQ_URL     = "https://api.groq.com/openai/v1/chat/completions"
 
 # ── Paths ─────────────────────────────────────────────────────
 BASE_DIR      = os.path.dirname(__file__)
-MODEL_PATH    = os.path.join(BASE_DIR, "nlp_model_final.pkl")
-FEEDBACK_PATH = os.path.join(BASE_DIR, "feedback.csv")
-TRAINING_PATH = os.path.join(BASE_DIR, "clean_training_data.csv")
-BASELINE_PATH = os.path.join(BASE_DIR, "baseline_stats.json")
+# DATA_DIR points to Railway Volume mount if available, else falls back to app root.
+# On Railway: add a Volume mounted at /app/data in your project settings.
+DATA_DIR      = "/app/data" if os.path.isdir("/app/data") else BASE_DIR
+os.makedirs(DATA_DIR, exist_ok=True)
+MODEL_PATH    = os.path.join(DATA_DIR, "nlp_model_final.pkl")
+FEEDBACK_PATH = os.path.join(DATA_DIR, "feedback.csv")
+TRAINING_PATH = os.path.join(BASE_DIR, "clean_training_data.csv")  # read-only source, stays in repo
+BASELINE_PATH = os.path.join(DATA_DIR, "baseline_stats.json")
+
+# On first deploy, seed the model from the repo copy if Volume doesn't have one yet
+_SEED_MODEL = os.path.join(BASE_DIR, "nlp_model_final.pkl")
+if not os.path.exists(MODEL_PATH) and os.path.exists(_SEED_MODEL):
+    import shutil
+    shutil.copy2(_SEED_MODEL, MODEL_PATH)
+    print("✓ Seeded model from repo into persistent volume")
 
 # ── Feedback config ───────────────────────────────────────────
 RETRAIN_EVERY    = 10
@@ -45,11 +56,13 @@ def load_model():
         print("⚠ nlp_model_final.pkl not found — /api/classify will use keyword fallback")
 
 def count_existing_feedback():
-    global total_corrections
+    global total_corrections, feedback_count
     if os.path.exists(FEEDBACK_PATH):
         with open(FEEDBACK_PATH, "r", encoding="utf-8") as f:
             total_corrections = max(0, sum(1 for row in csv.reader(f) if row) - 1)
-        print(f"✓ Found {total_corrections} existing feedback corrections")
+        # Restore progress toward next retrain so a server restart doesn't reset the countdown
+        feedback_count = total_corrections % RETRAIN_EVERY
+        print(f"✓ Found {total_corrections} existing corrections (next retrain in {RETRAIN_EVERY - feedback_count})")
 
 load_model()
 count_existing_feedback()
@@ -127,7 +140,7 @@ def classify():
                 "description": desc, "predicted": pred,
                 "group_name": MATERIAL_GROUPS.get(pred, pred),
                 "confidence": round(conf*100, 1),
-                "decision": "AUTO APPLY" if conf >= 0.85 else "REVIEW",
+                "decision": "AUTO APPLY" if conf >= 0.95 else "REVIEW",
                 "top3": [{"group": nlp_pipeline.classes_[j], "pct": round(float(prob[j])*100,1)} for j in top3_idx],
             })
     else:
@@ -137,7 +150,7 @@ def classify():
                 "description": desc, "predicted": grp,
                 "group_name": MATERIAL_GROUPS.get(grp, grp),
                 "confidence": round(conf*100, 1),
-                "decision": "AUTO APPLY" if conf >= 0.85 else "REVIEW",
+                "decision": "AUTO APPLY" if conf >= 0.95 else "REVIEW",
                 "top3": [{"group": grp, "pct": round(conf*100,1)}],
                 "note": "keyword-fallback",
             })
@@ -241,6 +254,40 @@ def known_corrections():
         print(f"Error reading feedback: {e}")
     return jsonify({"corrections": corrections, "total": len(corrections), "total_raw": total_raw})
 
+# ── API: Export feedback.csv as download ─────────────────────
+@app.route("/api/feedback/export", methods=["GET"])
+def export_feedback():
+    if not os.path.exists(FEEDBACK_PATH):
+        return jsonify({"error": "No feedback data to export"}), 404
+    return send_file(FEEDBACK_PATH, mimetype="text/csv",
+                     as_attachment=True, download_name="feedback.csv")
+
+# ── API: Import feedback.csv upload ──────────────────────────
+@app.route("/api/feedback/import", methods=["POST"])
+def import_feedback():
+    global total_corrections, feedback_count
+    if "file" not in request.files:
+        return jsonify({"error": "No file uploaded"}), 400
+    f = request.files["file"]
+    if not f.filename.endswith(".csv"):
+        return jsonify({"error": "Must be a .csv file"}), 400
+    try:
+        content = f.read().decode("utf-8")
+        # Validate it has our expected header
+        first_line = content.split("\n")[0].strip()
+        if "DESCRIPTION" not in first_line or "MATERIAL_GROUP" not in first_line:
+            return jsonify({"error": "Invalid feedback CSV format — expected DESCRIPTION, MATERIAL_GROUP columns"}), 400
+        with open(FEEDBACK_PATH, "w", encoding="utf-8") as out:
+            out.write(content)
+        # Recount after import
+        total_corrections = max(0, content.count("\n") - 1)
+        feedback_count = total_corrections % RETRAIN_EVERY
+        print(f"✓ Imported feedback.csv — {total_corrections} corrections restored")
+        return jsonify({"imported": True, "total_corrections": total_corrections,
+                        "message": f"Successfully imported {total_corrections} corrections"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 # ── API: Reset feedback ───────────────────────────────────────
 @app.route("/api/feedback/reset", methods=["POST"])
 def reset_feedback():
@@ -279,6 +326,7 @@ def verify_learning():
 
             current_conf = None
             current_pred = wrong_grp
+            correct_conf_now = None  # FIX: initialise before the if block to avoid UnboundLocalError
             if nlp_pipeline:
                 prob = nlp_pipeline.predict_proba([desc])[0]
                 current_pred = nlp_pipeline.predict([desc])[0]
@@ -385,7 +433,7 @@ def retrain_model():
             # Now add feedback corrections to training set only (not test set)
             if os.path.exists(FEEDBACK_PATH):
                 fb_df = pd.read_csv(FEEDBACK_PATH).dropna(subset=["DESCRIPTION", "MATERIAL_GROUP"])
-                # CRITICAL: Only learn from Accept or Edit. Skip Rejects (junk data)!
+                # CRITICAL: Only learn from Accept or Edit. Rejects = analyst says data is junk.
                 if "ACTION" in fb_df.columns:
                     fb_df = fb_df[fb_df["ACTION"].isin(["accept", "edit"])]
                 
