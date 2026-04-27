@@ -2249,6 +2249,9 @@
     async function finishAnalysis(mlResults, knownCorrections = {}) {
       // Build a lookup map from ML results (indexed by position across all rows)
       const ebanLen = (ebanData || []).length;
+      const ekpoLen = (ekpoData || []).length;
+      const totalCount = ebanLen + ekpoLen;
+      const threshold = totalCount > 100 ? 5 : 2;
 
       const eban = (ebanData || []).map((r, idx) => {
         const txt = r.TXZ01 || r.Description || r.description || '';
@@ -2256,7 +2259,6 @@
         // Use ML predicted group if available and confident, else keep original
         const mlGrp = ml && ml.confidence >= 70 ? ml.predicted : null;
         const grp = mlGrp || r.MATGR || r.Predicted || r.predicted || '';
-        const threshold = all.length > 100 ? 5 : 2;
         const known = knownCorrections[txt.toLowerCase().trim()];
         const isHighlyConfident = ml && ml.confidence >= 98 && known;
 
@@ -2281,7 +2283,6 @@
         const mlGrp = ml && ml.confidence >= 70 ? ml.predicted : null;
         const grp = mlGrp || r.MATGR || r.Predicted || r.predicted || '';
         const origGrp = r.MATGR || r.Predicted || r.predicted || '';
-        const threshold = all.length > 100 ? 5 : 2;
         const knownEk = knownCorrections[txt.toLowerCase().trim()];
         const isHighlyConfidentEk = ml && ml.confidence >= 98 && knownEk;
 
