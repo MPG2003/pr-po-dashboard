@@ -2312,17 +2312,9 @@
       document.getElementById('v-ekpo').textContent = ekpo.filter(r => r.issue === 'vague').length;
       allMisclass = all.filter(r => r.issue === 'misclass');
       allVague = all.filter(r => r.issue === 'vague');
-      // Subtract already-reviewed records (from backend feedback corrections) so count persists across refreshes
-      allReview = all.filter(r => r.issue === 'vague');
-      // Fetch corrections count from backend and slice out already-reviewed records
-      try {
-        const fbResp = await fetch('/api/feedback/stats');
-        if (fbResp.ok) {
-          const fbData = await fbResp.json();
-          const alreadyReviewed = Math.min(fbData.total_corrections || 0, allReview.length);
-          allReview = allReview.slice(alreadyReviewed);
-        }
-      } catch (e) { /* no server, use all */ }
+      allVague = all.filter(r => r.issue === 'vague');
+      allReview = allVague;
+
       reviewBatchStart = 0;
       document.getElementById('sb-review').textContent = allReview.length;
       buildCharts(eban, ekpo, all);
@@ -2543,7 +2535,7 @@
         const clean = allAnalyzed.filter(r => r.issue === 'clean').length;
         const vague = allAnalyzed.filter(r => r.issue === 'vague').length;
         const misc = allAnalyzed.filter(r => r.issue === 'misclass').length;
-        const quality = Math.round(clean / total * 100);
+        const quality = total > 0 ? Math.round(clean / total * 100) : 0;
 
         saveBaseline(vague, misc, quality);
         toast('✓ New baseline saved!', 'ok');
@@ -2634,16 +2626,21 @@
         // ── Corrections per cycle bar chart ──
 
         // ── Corrections per cycle bar chart ──
-        if (retrains > 0) {
+        if (retrains > 0 || total > 0) {
           correctionsPerCycle = [];
-          for (let i = 1; i <= retrains; i++) {
-            const c = i < retrains ? 10 : Math.max(1, total - (retrains - 1) * 10);
-            correctionsPerCycle.push(c);
+          if (retrains > 0) {
+            for (let i = 1; i <= retrains; i++) {
+              const c = i < retrains ? 10 : Math.max(1, total - (retrains - 1) * 10);
+              correctionsPerCycle.push(c);
+            }
+          } else {
+            // No retrains yet, show current progress in Cycle 1
+            correctionsPerCycle.push(total);
           }
-          document.getElementById('fb-chart-sub').textContent = `${total} corrections across ${retrains} retrain cycle${retrains > 1 ? 's' : ''} · next retrain in ${nextRet} more`;
+          document.getElementById('fb-chart-sub').textContent = retrains > 0
+            ? `${total} corrections across ${retrains} cycles · next retrain in ${nextRet}`
+            : `${total} corrections queued · ${nextRet} more until first retrain cycle`;
           updateFeedbackChart();
-        } else if (total > 0) {
-          document.getElementById('fb-chart-sub').textContent = `${total} corrections queued · ${nextRet} more until first retrain`;
         }
 
         // ── All corrections history table ──
@@ -2753,9 +2750,11 @@
         }).join('');
 
       } catch (e) {
+        console.error('Verify Tab Error:', e);
         document.getElementById('verify-loading').style.display = 'none';
         document.getElementById('verify-empty').style.display = 'block';
-        document.getElementById('verify-empty').querySelector('div:last-child').textContent = 'Could not reach server — is Flask running?';
+        const msg = (e.name === 'SyntaxError') ? 'Server returned invalid data' : 'Could not reach server — check Flask logs';
+        document.getElementById('verify-empty').querySelector('div:last-child').textContent = msg;
       }
     }
 
