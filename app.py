@@ -377,7 +377,11 @@ def retrain_model():
 
             # Now add feedback corrections to training set only (not test set)
             if os.path.exists(FEEDBACK_PATH):
-                fb_df = pd.read_csv(FEEDBACK_PATH)[["DESCRIPTION", "MATERIAL_GROUP"]].dropna()
+                fb_df = pd.read_csv(FEEDBACK_PATH).dropna(subset=["DESCRIPTION", "MATERIAL_GROUP"])
+                # CRITICAL: Only learn from Accept or Edit. Skip Rejects (junk data)!
+                if "ACTION" in fb_df.columns:
+                    fb_df = fb_df[fb_df["ACTION"].isin(["accept", "edit"])]
+                
                 fb_df = fb_df[fb_df["MATERIAL_GROUP"].isin(MATERIAL_GROUPS.keys())]
                 if len(fb_df) > 0:
                     fb_X = pd.concat([fb_df["DESCRIPTION"].str.lower()] * 20)
