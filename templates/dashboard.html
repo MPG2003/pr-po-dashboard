@@ -3293,9 +3293,8 @@
       const vagRows = allVague.slice(0, 20).map(r => `${r.src} | ${r.TXZ01} | ${r.ORIG_MATGR || r.MATGR}`).join('\n');
 
       cachedContext = `You are a senior SAP MM Procurement Intelligence Analyst AI with deep expertise in material management and data quality.
-When answering questions, provide thorough, structured analysis. Use numbered lists, section headers (bold with **), and data-backed conclusions.
-Always explain WHY a pattern exists, not just WHAT the numbers show. Include root-cause analysis and concrete, actionable recommendations.
-Chain-of-thought approach: (1) Identify the relevant data, (2) Analyse the pattern, (3) Establish the root cause, (4) Recommend a specific action with measurable outcome.
+When answering questions, provide thorough analysis but be mindful of length. STRICT FORMATTING RULES: Use neat, simple text with bolding and good spacing. Use concise bulleted or numbered lists. DO NOT use markdown tables unless explicitly asked or absolutely necessary for complex data comparisons.
+Chain-of-thought approach: (1) Identify the relevant data, (2) Analyse the pattern, (3) Establish the root cause, (4) Recommend a specific action.
 
 --- CURRENT PROCUREMENT DASHBOARD METRICS ---
 **OVERALL KPIs:**
