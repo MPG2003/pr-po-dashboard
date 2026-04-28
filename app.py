@@ -17,8 +17,10 @@ app = Flask(__name__)
 
 # ── Groq config ───────────────────────────────────────────────
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
-GROQ_MODEL   = "deepseek-r1-distill-llama-70b"
-GROQ_URL     = "https://api.groq.com/openai/v1/chat/completions"
+GROQ_MODEL_PRIMARY  = "deepseek-r1-distill-llama-70b"
+GROQ_MODEL_FALLBACK = "llama-3.3-70b-versatile"
+GROQ_MODEL          = GROQ_MODEL_PRIMARY   # used by /api/health
+GROQ_URL            = "https://api.groq.com/openai/v1/chat/completions"
 
 # ── Paths ─────────────────────────────────────────────────────
 BASE_DIR      = os.path.dirname(__file__)
@@ -84,27 +86,42 @@ def chat():
     if not GROQ_API_KEY:
         return jsonify({"error": "GROQ_API_KEY not configured on server"}), 500
     body = request.get_json(force=True)
-    payload = {
-        "model": GROQ_MODEL,
-        "max_tokens": body.get("max_tokens", 2000),
-        "temperature": 0.4,
-        "messages": [
-            {"role": "system", "content": body.get("system", "You are a helpful SAP procurement analyst.")},
-            *body.get("messages", [])[-20:]
-        ]
-    }
-    try:
-        resp = http_requests.post(
+    sys_msg  = body.get("system", "You are a helpful SAP procurement analyst.")
+    messages = body.get("messages", [])[-20:]
+
+    def _call_groq(model, max_tokens):
+        payload = {
+            "model": model,
+            "max_tokens": max_tokens,
+            "temperature": 0.4,
+            "messages": [{"role": "system", "content": sys_msg}, *messages]
+        }
+        return http_requests.post(
             GROQ_URL,
             headers={"Content-Type": "application/json", "Authorization": f"Bearer {GROQ_API_KEY}"},
             json=payload, timeout=90
         )
+
+    def _extract(resp):
+        raw = resp.json()["choices"][0]["message"]["content"]
+        return re.sub(r'<think>.*?</think>', '', raw, flags=re.DOTALL).strip()
+
+    try:
+        # ── Primary: DeepSeek-R1 (deep reasoning) ────────────────
+        resp = _call_groq(GROQ_MODEL_PRIMARY, body.get("max_tokens", 2000))
+        if resp.status_code == 200 and "choices" in resp.json():
+            return jsonify({"text": _extract(resp), "model_used": GROQ_MODEL_PRIMARY}), 200
+
+        # ── Fallback: LLaMA 3.3 70B (faster, if rate-limited) ───
+        if resp.status_code in (429, 503):
+            print(f"⚠ Primary model rate-limited ({resp.status_code}) — falling back to {GROQ_MODEL_FALLBACK}")
+            resp2 = _call_groq(GROQ_MODEL_FALLBACK, 800)
+            if resp2.status_code == 200 and "choices" in resp2.json():
+                return jsonify({"text": _extract(resp2), "model_used": GROQ_MODEL_FALLBACK}), 200
+            data2 = resp2.json()
+            return jsonify({"error": data2.get("error", {}).get("message", str(data2))}), resp2.status_code
+
         data = resp.json()
-        if resp.status_code == 200 and "choices" in data:
-            raw = data["choices"][0]["message"]["content"]
-            # Strip DeepSeek-R1 internal chain-of-thought <think>...</think> blocks
-            clean = re.sub(r'<think>.*?</think>', '', raw, flags=re.DOTALL).strip()
-            return jsonify({"text": clean}), 200
         return jsonify({"error": data.get("error", {}).get("message", str(data))}), resp.status_code
     except Exception as e:
         return jsonify({"error": str(e)}), 500
