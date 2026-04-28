@@ -1515,7 +1515,7 @@
       </div>
       <div class="sb-model">
         <div class="sb-model-dot"></div>
-        <div class="sb-model-text">TF-IDF + LogReg · 91.2% · LLM: 70B</div>
+        <div class="sb-model-text">TF-IDF + LogReg · 91.2% · LLM: 120B</div>
       </div>
     </div>
     <nav class="sb-nav">
@@ -2864,7 +2864,7 @@
           el.innerHTML = `<div style="width:5px;height:5px;background:var(--green);border-radius:50%"></div>${total > 0 ? total + ' corrections active' : 'Model Accuracy: 91.2%'}`;
         });
         document.querySelectorAll('.sb-model-text').forEach(el => {
-          el.textContent = total > 0 ? `TF-IDF + LogReg · ${total} corrections · LLM: 70B` : 'TF-IDF + LogReg · 91.2% · LLM: 70B';
+          el.textContent = total > 0 ? `TF-IDF + LogReg · ${total} corrections · LLM: 120B` : 'TF-IDF + LogReg · 91.2% · LLM: 120B';
         });
 
         // ── Impact Banner (baseline vs current) ──
@@ -3227,7 +3227,7 @@
         if (data.total_corrections !== undefined) {
           const total = data.total_corrections;
           document.querySelectorAll('.sb-model-text').forEach(el => {
-            el.textContent = `TF-IDF + LogReg · ${total} corrections · LLM: 70B`;
+            el.textContent = `TF-IDF + LogReg · ${total} corrections · LLM: 120B`;
           });
           document.querySelectorAll('.acc-chip').forEach(el => {
             el.innerHTML = `<div style="width:5px;height:5px;background:var(--green);border-radius:50%"></div> Model: ${total} corrections fed in`;
