@@ -17,7 +17,7 @@ app = Flask(__name__)
 
 # ── Groq config ───────────────────────────────────────────────
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
-GROQ_MODEL_PRIMARY  = "deepseek-r1-distill-llama-70b"
+GROQ_MODEL_PRIMARY  = "openai/gpt-oss-120b"
 GROQ_MODEL_FALLBACK = "llama-3.3-70b-versatile"
 GROQ_MODEL          = GROQ_MODEL_PRIMARY   # used by /api/health
 GROQ_URL            = "https://api.groq.com/openai/v1/chat/completions"
