@@ -3224,33 +3224,35 @@
       allMisclass.forEach(r => { const k = `${r.ORIG_MATGR}→${r.correct}`; mPairs[k] = (mPairs[k] || 0) + 1; });
       const patternLines = Object.entries(mPairs).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([p, c]) => `${p}: ${c} records`).join('\n');
 
-      const misRows = allMisclass.slice(0, 50).map(r => `${r.src} | ${r.TXZ01} | ${r.ORIG_MATGR}→${r.correct}`).join('\n');
-      const vagRows = allVague.slice(0, 50).map(r => `${r.src} | ${r.TXZ01} | ${r.ORIG_MATGR || r.MATGR}`).join('\n');
+      const misRows = allMisclass.slice(0, 20).map(r => `${r.src} | ${r.TXZ01} | ${r.ORIG_MATGR}→${r.correct}`).join('\n');
+      const vagRows = allVague.slice(0, 20).map(r => `${r.src} | ${r.TXZ01} | ${r.ORIG_MATGR || r.MATGR}`).join('\n');
 
-      cachedContext = `You are a highly intelligent SAP MM Executive Analyst AI.
-CRITICAL INSTRUCTION: Analyze the provided data below and answer the user's question. Keep your answers extremely concise, structured, and easy to read. Use short bulleted or numbered lists wherever possible instead of long paragraphs. Do not use filler text. 
+      cachedContext = `You are a senior SAP MM Procurement Intelligence Analyst AI with deep expertise in material management and data quality.
+When answering questions, provide thorough, structured analysis. Use numbered lists, section headers (bold with **), and data-backed conclusions.
+Always explain WHY a pattern exists, not just WHAT the numbers show. Include root-cause analysis and concrete, actionable recommendations.
+Chain-of-thought approach: (1) Identify the relevant data, (2) Analyse the pattern, (3) Establish the root cause, (4) Recommend a specific action with measurable outcome.
 
 --- CURRENT PROCUREMENT DASHBOARD METRICS ---
-OVERALL KPIs:
+**OVERALL KPIs:**
 Total Records Analyzed: ${total}
 Clean Records: ${clean} (Quality Score: ${quality}%)
 Vague Descriptions: ${vague}
 Misclassified Records: ${misc}
 Source Document Split: EBAN PRs = ${eban.length} | EKPO POs = ${ekpo.length}
 
-MATERIAL CATEGORY BREAKDOWN:
+**MATERIAL CATEGORY BREAKDOWN:**
 ${groupLines}
 
-DEPARTMENTS/VENDORS WITH MOST ISSUES:
+**DEPARTMENTS/VENDORS WITH MOST ISSUES:**
 ${deptLines}
 
-FREQUENT ALGORITHMIC MISCLASSIFICATION PATTERNS:
+**FREQUENT ALGORITHMIC MISCLASSIFICATION PATTERNS:**
 ${patternLines}
 
-SAMPLE MISCLASSIFICATION RECORDS:
+**SAMPLE MISCLASSIFICATION RECORDS (20):**
 ${misRows}
 
-SAMPLE VAGUE RECORDS:
+**SAMPLE VAGUE RECORDS (20):**
 ${vagRows}`;
     }
 
@@ -3304,6 +3306,31 @@ ${vagRows}`;
       toast(`✓ Downloaded ${filename}`, 'ok');
     }
 
+    async function sendDeepQuery(prompt) {
+      // Called by macro buttons — uses a full detailed prompt + higher token budget
+      const input = document.getElementById('chat-input');
+      input.value = prompt;
+      addMessage('user', prompt);
+      chatHistory.push({ role: 'user', content: prompt });
+      input.value = '';
+
+      try {
+        const response = await fetch('/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            system: getSystemPrompt(),
+            messages: chatHistory.slice(-20),
+            max_tokens: 2000
+          })
+        });
+        const data = await response.json();
+        const reply = data.text || 'Error communicating with AI.';
+        addMessage('ai', reply);
+        chatHistory.push({ role: 'assistant', content: reply });
+      } catch (err) { addMessage('ai', 'Network error.'); }
+    }
+
     async function sendMessage() {
       const input = document.getElementById('chat-input');
       const msg = input.value.trim();
@@ -3316,7 +3343,7 @@ ${vagRows}`;
         const response = await fetch('/api/chat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ system: getSystemPrompt(), messages: chatHistory.slice(-10) })
+          body: JSON.stringify({ system: getSystemPrompt(), messages: chatHistory.slice(-20) })
         });
         const data = await response.json();
         const reply = data.text || 'Error communicating with AI.';
@@ -3356,15 +3383,15 @@ ${vagRows}`;
         style="flex-shrink:0;white-space:nowrap;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:6px 12px;border-radius:15px;font-size:11px;cursor:pointer;transition:all 0.2s">⬇️
         Export Clean</button>
       <button class="chat-quick-btn"
-        onclick="document.getElementById('chat-input').value='Provide a comprehensive data quality breakdown.'; sendMessage()"
+        onclick="sendDeepQuery('Provide a comprehensive data quality breakdown with root-cause analysis for each issue type and specific corrective actions.')"
         style="flex-shrink:0;white-space:nowrap;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:6px 12px;border-radius:15px;font-size:11px;cursor:pointer;transition:all 0.2s">📊
         Data Quality Breakdown</button>
       <button class="chat-quick-btn"
-        onclick="document.getElementById('chat-input').value='What are the top 3 misclassifications happening in the system?'; sendMessage()"
+        onclick="sendDeepQuery('Analyse the top misclassification patterns in detail. For each pattern: explain why the AI is getting it wrong, what the business impact is, and what corrective training data or rule changes would fix it.')"
         style="flex-shrink:0;white-space:nowrap;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:6px 12px;border-radius:15px;font-size:11px;cursor:pointer;transition:all 0.2s">⚠️
         Top Misclasses</button>
       <button class="chat-quick-btn"
-        onclick="document.getElementById('chat-input').value='Which department requires the most data entry retraining?'; sendMessage()"
+        onclick="sendDeepQuery('Which departments require the most data entry retraining? Analyse each department\'s error profile, identify the root cause of their data quality issues, and recommend a specific retraining plan.')"
         style="flex-shrink:0;white-space:nowrap;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:6px 12px;border-radius:15px;font-size:11px;cursor:pointer;transition:all 0.2s">🏢
         Dept Breakdown</button>
     </div>

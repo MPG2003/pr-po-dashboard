@@ -3,7 +3,7 @@ PR/PO Intelligence Dashboard
 - Server-side Groq API key (hidden from users)
 - ML model /api/classify endpoint
 - Persistent feedback learning — /api/feedback + /api/retrain
-- Upgraded to llama-3.3-70b-versatile
+- Upgraded to deepseek-r1-distill-llama-70b (reasoning model)
 """
 
 import os
@@ -17,7 +17,7 @@ app = Flask(__name__)
 
 # ── Groq config ───────────────────────────────────────────────
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
-GROQ_MODEL   = "llama-3.3-70b-versatile"
+GROQ_MODEL   = "deepseek-r1-distill-llama-70b"
 GROQ_URL     = "https://api.groq.com/openai/v1/chat/completions"
 
 # ── Paths ─────────────────────────────────────────────────────
@@ -80,18 +80,31 @@ def index():
 # ── API: Chat via Groq ────────────────────────────────────────
 @app.route("/api/chat", methods=["POST"])
 def chat():
+    import re
     if not GROQ_API_KEY:
         return jsonify({"error": "GROQ_API_KEY not configured on server"}), 500
     body = request.get_json(force=True)
     payload = {
-        "model": GROQ_MODEL, "max_tokens": body.get("max_tokens", 800), "temperature": 0.3,
-        "messages": [{"role": "system", "content": body.get("system", "You are a helpful SAP procurement analyst.")}, *body.get("messages", [])[-14:]]
+        "model": GROQ_MODEL,
+        "max_tokens": body.get("max_tokens", 2000),
+        "temperature": 0.4,
+        "messages": [
+            {"role": "system", "content": body.get("system", "You are a helpful SAP procurement analyst.")},
+            *body.get("messages", [])[-20:]
+        ]
     }
     try:
-        resp = http_requests.post(GROQ_URL, headers={"Content-Type": "application/json", "Authorization": f"Bearer {GROQ_API_KEY}"}, json=payload, timeout=60)
+        resp = http_requests.post(
+            GROQ_URL,
+            headers={"Content-Type": "application/json", "Authorization": f"Bearer {GROQ_API_KEY}"},
+            json=payload, timeout=90
+        )
         data = resp.json()
         if resp.status_code == 200 and "choices" in data:
-            return jsonify({"text": data["choices"][0]["message"]["content"]}), 200
+            raw = data["choices"][0]["message"]["content"]
+            # Strip DeepSeek-R1 internal chain-of-thought <think>...</think> blocks
+            clean = re.sub(r'<think>.*?</think>', '', raw, flags=re.DOTALL).strip()
+            return jsonify({"text": clean}), 200
         return jsonify({"error": data.get("error", {}).get("message", str(data))}), resp.status_code
     except Exception as e:
         return jsonify({"error": str(e)}), 500
