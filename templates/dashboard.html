@@ -3325,10 +3325,10 @@ ${vagRows}`;
           })
         });
         const data = await response.json();
-        const reply = data.text || 'Error communicating with AI.';
+        const reply = data.text || ('⚠ AI Error: ' + (data.error || 'Unknown error'));
         addMessage('ai', reply);
         chatHistory.push({ role: 'assistant', content: reply });
-      } catch (err) { addMessage('ai', 'Network error.'); }
+      } catch (err) { addMessage('ai', '⚠ Network error: ' + err.message); }
     }
 
     async function sendMessage() {
@@ -3346,10 +3346,10 @@ ${vagRows}`;
           body: JSON.stringify({ system: getSystemPrompt(), messages: chatHistory.slice(-20) })
         });
         const data = await response.json();
-        const reply = data.text || 'Error communicating with AI.';
+        const reply = data.text || ('⚠ AI Error: ' + (data.error || 'Unknown error'));
         addMessage('ai', reply);
         chatHistory.push({ role: 'assistant', content: reply });
-      } catch (err) { addMessage('ai', 'Network error.'); }
+      } catch (err) { addMessage('ai', '⚠ Network error: ' + err.message); }
     }
 
     window.addEventListener('DOMContentLoaded', () => {
