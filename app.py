@@ -17,7 +17,7 @@ app = Flask(__name__)
 # ── API Keys ──────────────────────────────────────────────────
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
 GROQ_API_KEY       = os.environ.get("GROQ_API_KEY", "")
-
+OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions" 
 OPENROUTER_MODELS = [
     "deepseek/deepseek-r1:free",
     "google/gemma-3-27b-it:free",
