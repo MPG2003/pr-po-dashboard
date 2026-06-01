@@ -14,13 +14,24 @@ import requests as http_requests
 from flask import Flask, request, jsonify, send_file
 
 app = Flask(__name__)
+# ── API Keys ──────────────────────────────────────────────────
+OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
+GROQ_API_KEY       = os.environ.get("GROQ_API_KEY", "")
 
-# ── Groq config ───────────────────────────────────────────────
-GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
-GROQ_MODEL_PRIMARY  = "llama-3.3-70b-versatile"
-GROQ_MODEL_FALLBACK = "llama-3.3-70b-versatile"
-GROQ_MODEL          = GROQ_MODEL_PRIMARY   # used by /api/health
-GROQ_URL            = "https://api.groq.com/openai/v1/chat/completions"
+# ── OpenRouter models (primary) ───────────────────────────────
+OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
+OPENROUTER_MODELS = [
+    "deepseek/deepseek-r1-0528:free",
+    "qwen/qwen3-235b-a22b:free",
+    "meta-llama/llama-3.3-70b-instruct:free",
+]
+
+# ── Groq models (secondary/fallback) ─────────────────────────
+GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
+GROQ_MODELS = [
+    "llama-3.3-70b-versatile",
+    "gemma2-9b-it",
+]
 
 # ── Paths ─────────────────────────────────────────────────────
 BASE_DIR      = os.path.dirname(__file__)
@@ -83,48 +94,70 @@ def index():
 @app.route("/api/chat", methods=["POST"])
 def chat():
     import re
-    if not GROQ_API_KEY:
-        return jsonify({"error": "GROQ_API_KEY not configured on server"}), 500
-    body = request.get_json(force=True)
-    sys_msg  = body.get("system", "You are a helpful SAP procurement analyst.")
-    messages = body.get("messages", [])[-20:]
+    body       = request.get_json(force=True)
+    sys_msg    = body.get("system", "You are a helpful SAP procurement analyst.")
+    messages   = body.get("messages", [])[-20:]
+    max_tokens = min(int(body.get("max_tokens", 2000)), 2000)
 
-    def _call_groq(model, max_tokens):
-        payload = {
-            "model": model,
-            "max_tokens": max_tokens,
-            "temperature": 0.4,
-            "messages": [{"role": "system", "content": sys_msg}, *messages]
-        }
-        return http_requests.post(
-            GROQ_URL,
-            headers={"Content-Type": "application/json", "Authorization": f"Bearer {GROQ_API_KEY}"},
-            json=payload, timeout=90
-        )
+    def _strip_think(text):
+        return re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL).strip()
 
-    def _extract(resp):
-        raw = resp.json()["choices"][0]["message"]["content"]
-        return re.sub(r'<think>.*?</think>', '', raw, flags=re.DOTALL).strip()
+    # ── Try OpenRouter first ──────────────────────────────────
+    if OPENROUTER_API_KEY:
+        for model in OPENROUTER_MODELS:
+            try:
+                resp = http_requests.post(
+                    OPENROUTER_URL,
+                    headers={
+                        "Content-Type":  "application/json",
+                        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+                        "HTTP-Referer":  "https://sap-prpo.app",
+                        "X-Title":       "SAP PR/PO Intelligence",
+                    },
+                    json={
+                        "model":      model,
+                        "max_tokens": max_tokens,
+                        "messages":   [{"role": "system", "content": sys_msg}, *messages],
+                    },
+                    timeout=120,
+                )
+                if resp.status_code == 200:
+                    text = _strip_think(resp.json()["choices"][0]["message"]["content"])
+                    if text:
+                        print(f"✓ OpenRouter response: {model}")
+                        return jsonify({"text": text, "model_used": model}), 200
+                print(f"⚠ OpenRouter {model} failed: HTTP {resp.status_code} — trying next")
+            except Exception as e:
+                print(f"⚠ OpenRouter {model} error: {e} — trying next")
 
-    try:
-        # ── Primary: DeepSeek-R1 (deep reasoning) ────────────────
-        resp = _call_groq(GROQ_MODEL_PRIMARY, body.get("max_tokens", 2000))
-        if resp.status_code == 200 and "choices" in resp.json():
-            return jsonify({"text": _extract(resp), "model_used": GROQ_MODEL_PRIMARY}), 200
+    # ── Fallback to Groq ──────────────────────────────────────
+    if GROQ_API_KEY:
+        for model in GROQ_MODELS:
+            try:
+                resp = http_requests.post(
+                    GROQ_URL,
+                    headers={
+                        "Content-Type":  "application/json",
+                        "Authorization": f"Bearer {GROQ_API_KEY}",
+                    },
+                    json={
+                        "model":       model,
+                        "max_tokens":  max_tokens,
+                        "temperature": 0.4,
+                        "messages":    [{"role": "system", "content": sys_msg}, *messages],
+                    },
+                    timeout=90,
+                )
+                if resp.status_code == 200:
+                    text = _strip_think(resp.json()["choices"][0]["message"]["content"])
+                    if text:
+                        print(f"✓ Groq fallback response: {model}")
+                        return jsonify({"text": text, "model_used": f"groq/{model}"}), 200
+                print(f"⚠ Groq {model} failed: HTTP {resp.status_code} — trying next")
+            except Exception as e:
+                print(f"⚠ Groq {model} error: {e} — trying next")
 
-        # ── Fallback: LLaMA 3.3 70B (faster, if rate-limited) ───
-        if resp.status_code in (429, 503):
-            print(f"⚠ Primary model rate-limited ({resp.status_code}) — falling back to {GROQ_MODEL_FALLBACK}")
-            resp2 = _call_groq(GROQ_MODEL_FALLBACK, 800)
-            if resp2.status_code == 200 and "choices" in resp2.json():
-                return jsonify({"text": _extract(resp2), "model_used": GROQ_MODEL_FALLBACK}), 200
-            data2 = resp2.json()
-            return jsonify({"error": data2.get("error", {}).get("message", str(data2))}), resp2.status_code
-
-        data = resp.json()
-        return jsonify({"error": data.get("error", {}).get("message", str(data))}), resp.status_code
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    return jsonify({"error": "All models failed — check API keys"}), 500
 
 # ── API: ML classify descriptions ────────────────────────────
 KEYWORD_MAP = [
@@ -520,12 +553,15 @@ def retrain_model():
 @app.route("/api/health")
 def health():
     return jsonify({
-        "status": "ok", "model": GROQ_MODEL,
-        "ml_loaded": nlp_pipeline is not None,
-        "model_accuracy": model_accuracy,
+        "status": "ok",
+        "openrouter_key": "configured" if OPENROUTER_API_KEY else "missing",
+        "groq_key":       "configured" if GROQ_API_KEY else "missing",
+        "primary_models":  OPENROUTER_MODELS,
+        "fallback_models": GROQ_MODELS,
+        "ml_loaded":       nlp_pipeline is not None,
+        "model_accuracy":  model_accuracy,
         "total_corrections": total_corrections,
         "next_retrain_in": max(0, RETRAIN_EVERY - feedback_count),
-        "groq_key": "configured" if GROQ_API_KEY else "missing — set GROQ_API_KEY env var",
     })
 
 if __name__ == "__main__":
