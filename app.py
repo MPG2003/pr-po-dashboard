@@ -117,7 +117,7 @@ def chat():
                         "max_tokens": max_tokens,
                         "messages":   [{"role": "system", "content": sys_msg}, *messages],
                     },
-                    timeout=120,
+                    timeout=30,
                 )
                 if resp.status_code == 200:
                     text = _strip_think(resp.json()["choices"][0]["message"]["content"])
