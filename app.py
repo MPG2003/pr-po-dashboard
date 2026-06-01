@@ -19,10 +19,10 @@ OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
 GROQ_API_KEY       = os.environ.get("GROQ_API_KEY", "")
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions" 
 OPENROUTER_MODELS = [
-    "deepseek/deepseek-chat-v3-0324:free",  
-    "qwen/qwen3-235b-a22b:free",             
-    "google/gemma-3-27b-it:free",           
-    "meta-llama/llama-3.3-70b-instruct:free",
+    "openai/gpt-oss-120b:free",          # 🏆 best — 120B OpenAI open model
+    "deepseek/deepseek-v4-flash:free",   # ✅ DeepSeek V4 — 1M context, reasoning
+    "google/gemma-4-31b-it:free",        # ✅ Google Gemma 4 — 256K context
+    "nvidia/nemotron-3-super-120b-a12b:free", # ✅ NVIDIA 120B — 1M context
 ]
 # ── Groq models (secondary/fallback) ─────────────────────────
 GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
