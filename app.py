@@ -18,14 +18,12 @@ app = Flask(__name__)
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
 GROQ_API_KEY       = os.environ.get("GROQ_API_KEY", "")
 
-# ── OpenRouter models (primary) ───────────────────────────────
-OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 OPENROUTER_MODELS = [
-    "deepseek/deepseek-r1-0528:free",
-    "qwen/qwen3-235b-a22b:free",
+    "deepseek/deepseek-r1:free",
+    "google/gemma-3-27b-it:free",
+    "mistralai/mistral-small-3.1-24b-instruct:free",
     "meta-llama/llama-3.3-70b-instruct:free",
 ]
-
 # ── Groq models (secondary/fallback) ─────────────────────────
 GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 GROQ_MODELS = [
