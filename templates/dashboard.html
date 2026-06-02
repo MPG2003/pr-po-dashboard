@@ -1687,6 +1687,10 @@
         <button class="sb-item" onclick="nav('feedback',this)">↻ Feedback Learning <span
             class="sb-badge green">+13.3%</span></button>
       </div>
+      <div class="sb-section">
+        <div class="sb-section-label">AI Copilot</div>
+        <button class="sb-item" id="sb-chat-btn" onclick="nav('chat',this)">💬 AI Assistant</button>
+      </div>
     </nav>
     <div class="sb-footer">
       <div class="acc-chip">
@@ -2278,6 +2282,35 @@
         </div>
       </div>
 
+      <!-- AI COPILOT -->
+      <div class="page" id="page-chat">
+        <div class="page-header" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px">
+          <div>
+            <div class="page-title">💬 AI Assistant</div>
+            <div class="page-sub">Interactive procurement copilot for instant data insights and predictions</div>
+          </div>
+          <button class="btn btn-ghost" style="color:var(--red); font-size:11px; padding:4px 10px" onclick="clearChat()">✕ Clear History</button>
+        </div>
+        
+        <div class="chat-page-container">
+          <div class="chat-messages" id="chat-messages"></div>
+          <div class="chat-quick-actions">
+            <button class="chat-quick-btn" onclick="sendDeepQuery('Provide a comprehensive data quality breakdown with root-cause analysis for each issue type and specific corrective actions.')">📊 Data Quality Breakdown</button>
+            <button class="chat-quick-btn" onclick="sendDeepQuery('Analyse the top misclassification patterns in detail. For each pattern: explain why the AI is getting it wrong, what the business impact is, and what corrective training data or rule changes would fix it.')">⚠️ Top Misclasses</button>
+            <button class="chat-quick-btn" onclick="sendDeepQuery('Which departments require the most data entry retraining? Analyse each department\'s error profile, identify the root cause of their data quality issues, and recommend a specific retraining plan.')">🏢 Dept Breakdown</button>
+            <div class="chat-quick-divider"></div>
+            <button class="chat-quick-btn export-btn" onclick="exportDataset(allMisclass, 'Misclassifications.csv')">⬇️ Export Misclass</button>
+            <button class="chat-quick-btn export-btn" onclick="exportDataset(allVague, 'Vague_Descriptions.csv')">⬇️ Export Vague</button>
+            <button class="chat-quick-btn export-btn" onclick="exportDataset(allAnalyzed.filter(r=>r.issue==='clean'), 'Clean_Records.csv')">⬇️ Export Clean</button>
+          </div>
+          <div class="chat-input-row">
+            <textarea class="chat-input" id="chat-input" placeholder="Ask a question..."
+              onkeydown="if(event.key==='Enter'){sendMessage();}"></textarea>
+            <button class="chat-send" onclick="sendMessage()">➤</button>
+          </div>
+        </div>
+      </div>
+
     </div>
   </div>
 
@@ -2311,7 +2344,15 @@
       document.querySelectorAll('.sb-item').forEach(i => i.classList.remove('active'));
       document.getElementById('page-' + page).classList.add('active');
       if (el) el.classList.add('active');
-      document.getElementById('tb-title').textContent = { overview: 'PR/PO Standardisation Intelligence Dashboard', insights: 'AI Insights', misclass: 'Misclassifications', vague: 'Vague Descriptions', review: 'Review Queue', feedback: 'Feedback Learning' }[page] || '';
+      document.getElementById('tb-title').textContent = { overview: 'PR/PO Standardisation Intelligence Dashboard', insights: 'AI Insights', misclass: 'Misclassifications', vague: 'Vague Descriptions', review: 'Review Queue', feedback: 'Feedback Learning', chat: 'AI Assistant' }[page] || '';
+      if (page === 'chat') {
+        setTimeout(() => {
+          const inp = document.getElementById('chat-input');
+          if (inp) inp.focus();
+          const msgs = document.getElementById('chat-messages');
+          if (msgs) msgs.scrollTop = msgs.scrollHeight;
+        }, 100);
+      }
     }
 
     // ── DRAG DROP ────────────────────────────────────────────────────────
@@ -3585,32 +3626,7 @@ ${vagRows}`;
 
   </script>
 
-  <div class="chat-overlay" id="chat-overlay" onclick="closeChat()"></div>
-  <button class="chat-fab" id="chat-fab" onclick="toggleChat()">💬</button>
-  <div class="chat-window" id="chat-window">
-    <div class="chat-header">
-      <div class="chat-header-icon">⬡</div>
-      <div style="flex:1">
-        <div class="chat-header-title">AI Assistant</div>
-      </div>
-      <button class="ch-btn" onclick="toggleChat()">✕</button>
-    </div>
-    <div class="chat-messages" id="chat-messages"></div>
-    <div class="chat-quick-actions">
-      <button class="chat-quick-btn" onclick="sendDeepQuery('Provide a comprehensive data quality breakdown with root-cause analysis for each issue type and specific corrective actions.')">📊 Data Quality Breakdown</button>
-      <button class="chat-quick-btn" onclick="sendDeepQuery('Analyse the top misclassification patterns in detail. For each pattern: explain why the AI is getting it wrong, what the business impact is, and what corrective training data or rule changes would fix it.')">⚠️ Top Misclasses</button>
-      <button class="chat-quick-btn" onclick="sendDeepQuery('Which departments require the most data entry retraining? Analyse each department\'s error profile, identify the root cause of their data quality issues, and recommend a specific retraining plan.')">🏢 Dept Breakdown</button>
-      <div class="chat-quick-divider"></div>
-      <button class="chat-quick-btn export-btn" onclick="exportDataset(allMisclass, 'Misclassifications.csv')">⬇️ Export Misclass</button>
-      <button class="chat-quick-btn export-btn" onclick="exportDataset(allVague, 'Vague_Descriptions.csv')">⬇️ Export Vague</button>
-      <button class="chat-quick-btn export-btn" onclick="exportDataset(allAnalyzed.filter(r=>r.issue==='clean'), 'Clean_Records.csv')">⬇️ Export Clean</button>
-    </div>
-    <div class="chat-input-row">
-      <textarea class="chat-input" id="chat-input" placeholder="Ask a question..."
-        onkeydown="if(event.key==='Enter'){sendMessage();}"></textarea>
-      <button class="chat-send" onclick="sendMessage()">➤</button>
-    </div>
-  </div>
+  <button class="chat-fab" id="chat-fab" onclick="toggleChat()" title="AI Assistant">💬</button>
 </body>
 
 </html>
