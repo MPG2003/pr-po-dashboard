@@ -721,6 +721,8 @@
     }
 
     .chat-bubble.ai {
+      max-width: 92%;
+      overflow-x: auto;
       background: #ffffff;
       border: 1px solid #d0d7de;
       color: #24292f;
@@ -796,6 +798,7 @@
       margin: 14px 0;
       font-size: 12px;
       box-shadow: 0 1px 3px rgba(0,0,0,0.02);
+      table-layout: auto;
     }
 
     .chat-bubble.ai th,
@@ -803,6 +806,8 @@
       border: 1px solid #d0d7de;
       padding: 8px 12px;
       text-align: left;
+      vertical-align: top;
+      word-break: break-word;
     }
 
     .chat-bubble.ai th {
@@ -1148,7 +1153,8 @@
       top: 0;
       right: 0;
       bottom: 0;
-      width: 440px;
+      width: 550px;
+      max-width: 95vw;
       background: #ffffff;
       border-left: 1px solid #e1e4e8;
       display: flex;
@@ -1499,6 +1505,15 @@
       flex-shrink: 0;
     }
 
+    .chat-quick-divider {
+      width: 1px;
+      height: 20px;
+      background: #d0d7de;
+      align-self: center;
+      flex-shrink: 0;
+      margin: 0 4px;
+    }
+
     .chat-quick-actions::-webkit-scrollbar {
       height: 4px;
     }
@@ -1530,6 +1545,20 @@
       border-color: #0969da;
       color: #0969da;
       box-shadow: 0 2px 6px rgba(9, 105, 218, 0.15);
+      transform: translateY(-1px);
+    }
+
+    .chat-quick-btn.export-btn {
+      background: #f0fbf0;
+      border-color: rgba(63, 185, 80, 0.3);
+      color: #1a7f37;
+    }
+
+    .chat-quick-btn.export-btn:hover {
+      background: #dafbe1;
+      border-color: #2da44e;
+      color: #1a7f37;
+      box-shadow: 0 2px 6px rgba(45, 164, 78, 0.15);
       transform: translateY(-1px);
     }
 
@@ -1617,6 +1646,7 @@
       background: var(--surface3);
       border-radius: 2px;
     }
+
   </style>
 </head>
 
@@ -3552,6 +3582,7 @@ ${vagRows}`;
       refreshFeedbackStats();
       loadVerifyTab();
     });
+
   </script>
 
   <div class="chat-overlay" id="chat-overlay" onclick="closeChat()"></div>
@@ -3566,12 +3597,13 @@ ${vagRows}`;
     </div>
     <div class="chat-messages" id="chat-messages"></div>
     <div class="chat-quick-actions">
-      <button class="chat-quick-btn" onclick="exportDataset(allMisclass, 'Misclassifications.csv')">⬇️ Export Misclass</button>
-      <button class="chat-quick-btn" onclick="exportDataset(allVague, 'Vague_Descriptions.csv')">⬇️ Export Vague</button>
-      <button class="chat-quick-btn" onclick="exportDataset(allAnalyzed.filter(r=>r.issue==='clean'), 'Clean_Records.csv')">⬇️ Export Clean</button>
       <button class="chat-quick-btn" onclick="sendDeepQuery('Provide a comprehensive data quality breakdown with root-cause analysis for each issue type and specific corrective actions.')">📊 Data Quality Breakdown</button>
       <button class="chat-quick-btn" onclick="sendDeepQuery('Analyse the top misclassification patterns in detail. For each pattern: explain why the AI is getting it wrong, what the business impact is, and what corrective training data or rule changes would fix it.')">⚠️ Top Misclasses</button>
       <button class="chat-quick-btn" onclick="sendDeepQuery('Which departments require the most data entry retraining? Analyse each department\'s error profile, identify the root cause of their data quality issues, and recommend a specific retraining plan.')">🏢 Dept Breakdown</button>
+      <div class="chat-quick-divider"></div>
+      <button class="chat-quick-btn export-btn" onclick="exportDataset(allMisclass, 'Misclassifications.csv')">⬇️ Export Misclass</button>
+      <button class="chat-quick-btn export-btn" onclick="exportDataset(allVague, 'Vague_Descriptions.csv')">⬇️ Export Vague</button>
+      <button class="chat-quick-btn export-btn" onclick="exportDataset(allAnalyzed.filter(r=>r.issue==='clean'), 'Clean_Records.csv')">⬇️ Export Clean</button>
     </div>
     <div class="chat-input-row">
       <textarea class="chat-input" id="chat-input" placeholder="Ask a question..."
