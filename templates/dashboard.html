@@ -1102,8 +1102,8 @@
     /* CHATBOX */
     .chat-fab {
       position: fixed;
-      bottom: 24px;
-      right: 24px;
+      bottom: 80px;
+      right: 32px;
       width: 50px;
       height: 50px;
       background: linear-gradient(135deg, var(--blue), var(--purple));
@@ -1687,10 +1687,7 @@
         <button class="sb-item" onclick="nav('feedback',this)">↻ Feedback Learning <span
             class="sb-badge green">+13.3%</span></button>
       </div>
-      <div class="sb-section">
-        <div class="sb-section-label">AI Copilot</div>
-        <button class="sb-item" id="sb-chat-btn" onclick="nav('chat',this)">💬 AI Assistant</button>
-      </div>
+
     </nav>
     <div class="sb-footer">
       <div class="acc-chip">
@@ -3483,13 +3480,26 @@
       const vagRows = allVague.slice(0, 10).map(r => `${r.src} | ${r.TXZ01} | ${r.ORIG_MATGR || r.MATGR}`).join('\n');
 
       cachedContext = `You are a senior SAP MM Procurement Intelligence Analyst AI.
-When answering questions, provide thorough analysis but be EXTREMELY mindful of your length. 
-STRICT FORMATTING RULES: 
-- DO NOT use markdown tables under ANY circumstances. They consume too many tokens.
-- Use neat, simple text with bolding and good spacing. 
-- ONLY analyze and output the TOP 3 most critical issues/patterns. Do not list everything.
-- Keep your answers short, direct, and under 1000 words.
-Chain-of-thought approach: (1) Identify the relevant data, (2) Analyse the pattern, (3) Establish the root cause, (4) Recommend a specific action.
+
+STRICT OUTPUT RULES — FOLLOW EXACTLY:
+1. NEVER write paragraphs. Use ONLY bullet points, numbered lists, bold headings, and short markdown tables.
+2. Maximum 300 words per response. Be ruthlessly concise.
+3. Structure every answer as: **Heading** → bullet points → (optional) small table → **Action**.
+4. Use markdown tables ONLY when comparing 2+ items (max 5 rows). Keep cell text under 8 words.
+5. Focus on TOP 3 issues only. Never list everything.
+6. Every bullet point must be 1 line — no multi-sentence bullets.
+7. End with a bold **⚡ Recommended Action:** one-liner.
+
+Example format:
+## 🔍 Finding
+- **Point 1** — short fact
+- **Point 2** — short fact
+
+| Pattern | Count | Impact |
+|---------|-------|--------|
+| X → Y | 120 | High |
+
+**⚡ Action:** Do this specific thing.
 
 --- CURRENT PROCUREMENT DASHBOARD METRICS ---
 **OVERALL KPIs:**
@@ -3520,13 +3530,9 @@ ${vagRows}`;
     }
 
     function toggleChat() {
-      chatOpen = !chatOpen;
-      document.getElementById('chat-window').classList.toggle('open', chatOpen);
-      document.getElementById('chat-fab').innerHTML = chatOpen ? '✕' : '💬';
-      document.getElementById('chat-overlay').classList.toggle('show', chatOpen);
-      if (chatOpen) setTimeout(() => document.getElementById('chat-input').focus(), 300);
+      nav('chat', null);
     }
-    function closeChat() { if (chatOpen) toggleChat(); }
+    function closeChat() { }
     function clearChat() { chatHistory = []; document.getElementById('chat-messages').innerHTML = ''; addWelcomeMessage(); }
 
     function addWelcomeMessage() {
@@ -3572,6 +3578,95 @@ ${vagRows}`;
       toast(`✓ Downloaded ${filename}`, 'ok');
     }
 
+    // ── Streaming helper: create a live AI bubble ──────────────
+    function addStreamingBubble() {
+      const msgs = document.getElementById('chat-messages');
+      const div = document.createElement('div');
+      div.className = 'chat-msg';
+      const bubble = document.createElement('div');
+      bubble.className = 'chat-bubble ai';
+      bubble.innerHTML = '<span style="opacity:.5">⏳ Thinking…</span>';
+      div.innerHTML = '<div class="chat-avatar ai">⬡</div>';
+      div.appendChild(bubble);
+      msgs.appendChild(div);
+      msgs.scrollTop = msgs.scrollHeight;
+
+      let fullText = '';
+      let renderTimer = null;
+
+      function updateBubble() {
+        bubble.innerHTML = renderMarkdown(fullText);
+        msgs.scrollTop = msgs.scrollHeight;
+      }
+
+      return {
+        append(token) {
+          fullText += token;
+          // Throttle markdown re-render to every 80ms for smooth performance
+          if (!renderTimer) {
+            renderTimer = setTimeout(() => { renderTimer = null; updateBubble(); }, 80);
+          }
+        },
+        finish() {
+          if (renderTimer) { clearTimeout(renderTimer); renderTimer = null; }
+          updateBubble();
+          return fullText;
+        },
+        getText() { return fullText; }
+      };
+    }
+
+    async function streamChat(messages, maxTokens = 2000) {
+      const stream = addStreamingBubble();
+      try {
+        const response = await fetch('/api/chat/stream', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            system: getSystemPrompt(),
+            messages: messages,
+            max_tokens: maxTokens
+          })
+        });
+
+        if (!response.ok) {
+          stream.append('⚠ Server error: ' + response.status);
+          stream.finish();
+          return stream.getText();
+        }
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+
+          for (const line of lines) {
+            if (!line.startsWith('data: ')) continue;
+            try {
+              const data = JSON.parse(line.slice(6));
+              if (data.error) {
+                stream.append('⚠ ' + data.error);
+              } else if (data.token) {
+                stream.append(data.token);
+              }
+              // data.done — stream complete
+            } catch (e) { /* skip malformed chunks */ }
+          }
+        }
+      } catch (err) {
+        stream.append('⚠ Network error: ' + err.message);
+      }
+      const finalText = stream.finish();
+      return finalText;
+    }
+
     async function sendDeepQuery(prompt) {
       // Called by macro buttons — uses a full detailed prompt + higher token budget
       const input = document.getElementById('chat-input');
@@ -3580,21 +3675,8 @@ ${vagRows}`;
       chatHistory.push({ role: 'user', content: prompt });
       input.value = '';
 
-      try {
-        const response = await fetch('/api/chat', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            system: getSystemPrompt(),
-            messages: chatHistory.slice(-20),
-            max_tokens: 2000
-          })
-        });
-        const data = await response.json();
-        const reply = data.text || ('⚠ AI Error: ' + (data.error || 'Unknown error'));
-        addMessage('ai', reply);
-        chatHistory.push({ role: 'assistant', content: reply });
-      } catch (err) { addMessage('ai', '⚠ Network error: ' + err.message); }
+      const reply = await streamChat(chatHistory.slice(-20), 2000);
+      chatHistory.push({ role: 'assistant', content: reply });
     }
 
     async function sendMessage() {
@@ -3605,17 +3687,8 @@ ${vagRows}`;
       addMessage('user', msg);
       chatHistory.push({ role: 'user', content: msg });
 
-      try {
-        const response = await fetch('/api/chat', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ system: getSystemPrompt(), messages: chatHistory.slice(-20) })
-        });
-        const data = await response.json();
-        const reply = data.text || ('⚠ AI Error: ' + (data.error || 'Unknown error'));
-        addMessage('ai', reply);
-        chatHistory.push({ role: 'assistant', content: reply });
-      } catch (err) { addMessage('ai', '⚠ Network error: ' + err.message); }
+      const reply = await streamChat(chatHistory.slice(-20));
+      chatHistory.push({ role: 'assistant', content: reply });
     }
 
     window.addEventListener('DOMContentLoaded', () => {
@@ -3626,7 +3699,7 @@ ${vagRows}`;
 
   </script>
 
-  <button class="chat-fab" id="chat-fab" onclick="toggleChat()" title="AI Assistant">💬</button>
+  <button class="chat-fab" id="chat-fab" onclick="nav('chat',null)" title="AI Assistant">💬</button>
 </body>
 
 </html>
