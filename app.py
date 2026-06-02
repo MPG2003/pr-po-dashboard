@@ -170,6 +170,24 @@ def chat_stream():
 
     full_messages = [{"role": "system", "content": sys_msg}, *messages]
 
+    def _clean_token(text):
+        """Replace all Unicode special chars with plain ASCII before sending to browser."""
+        return (text
+            .replace('\u201c', '"').replace('\u201d', '"')   # curly double quotes
+            .replace('\u2018', "'").replace('\u2019', "'")   # curly single quotes
+            .replace('\u201a', "'").replace('\u201b', "'")
+            .replace('\u2014', '--').replace('\u2015', '--') # em dash
+            .replace('\u2013', '-').replace('\u2012', '-')   # en dash
+            .replace('\u2192', '->').replace('\u2190', '<-') # arrows
+            .replace('\u2194', '<->').replace('\u21d2', '=>')
+            .replace('\u2026', '...')                        # ellipsis
+            .replace('\u00a0', ' ')                          # non-breaking space
+            .replace('\u2022', '-').replace('\u2023', '-')   # bullets
+            .replace('\u00d7', 'x').replace('\u00f7', '/')   # math
+            .replace('\u2264', '<=').replace('\u2265', '>=') # comparison
+            .replace('\u2260', '!=')
+        )
+
     def _try_stream(url, headers, payload, timeout, label):
         """Attempt a streaming request; yield (chunk_text) or return None on failure."""
         try:
@@ -260,7 +278,8 @@ def chat_stream():
                         else:
                             continue
                     if token:
-                        yield f"data: {_json.dumps({'token': token})}\n\n"
+                        token = _clean_token(token)
+                        yield f"data: {_json.dumps({'token': token}, ensure_ascii=True)}\n\n"
                 except (_json.JSONDecodeError, IndexError, KeyError):
                     continue
         finally:
