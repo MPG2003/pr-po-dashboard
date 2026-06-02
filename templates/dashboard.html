@@ -3610,105 +3610,36 @@ ${vagRows}`;
       toast(`✓ Downloaded ${filename}`, 'ok');
     }
 
-    // ── Streaming helper: create a live AI bubble ──────────────
-    function addStreamingBubble() {
-      const msgs = document.getElementById('chat-messages');
-      const div = document.createElement('div');
-      div.className = 'chat-msg';
-      const bubble = document.createElement('div');
-      bubble.className = 'chat-bubble ai';
-      bubble.innerHTML = '<span style="opacity:.5">Thinking...</span>';
-      div.innerHTML = '<div class="chat-avatar ai">⬡</div>';
-      div.appendChild(bubble);
-      msgs.appendChild(div);
-      msgs.scrollTop = msgs.scrollHeight;
-
-      let fullText = '';
-      let renderTimer = null;
-
-      function updateBubble() {
-        bubble.innerHTML = renderMarkdown(fullText);
-        msgs.scrollTop = msgs.scrollHeight;
-      }
-
-      return {
-        append(token) {
-          fullText += sanitizeText(token);
-          // Throttle markdown re-render to every 80ms for smooth performance
-          if (!renderTimer) {
-            renderTimer = setTimeout(() => { renderTimer = null; updateBubble(); }, 80);
-          }
-        },
-        finish() {
-          if (renderTimer) { clearTimeout(renderTimer); renderTimer = null; }
-          updateBubble();
-          return fullText;
-        },
-        getText() { return fullText; }
-      };
-    }
-
-    async function streamChat(messages, maxTokens = 2000) {
-      const stream = addStreamingBubble();
-      try {
-        const response = await fetch('/api/chat/stream', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            system: getSystemPrompt(),
-            messages: messages,
-            max_tokens: maxTokens
-          })
-        });
-
-        if (!response.ok) {
-          stream.append('⚠ Server error: ' + response.status);
-          stream.finish();
-          return stream.getText();
-        }
-
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder();
-        let buffer = '';
-
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-
-          buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split('\n');
-          buffer = lines.pop() || '';
-
-          for (const line of lines) {
-            if (!line.startsWith('data: ')) continue;
-            try {
-              const data = JSON.parse(line.slice(6));
-              if (data.error) {
-                stream.append('⚠ ' + data.error);
-              } else if (data.token) {
-                stream.append(data.token);
-              }
-              // data.done — stream complete
-            } catch (e) { /* skip malformed chunks */ }
-          }
-        }
-      } catch (err) {
-        stream.append('⚠ Network error: ' + err.message);
-      }
-      const finalText = stream.finish();
-      return finalText;
-    }
-
     async function sendDeepQuery(prompt) {
-      // Called by macro buttons — uses a full detailed prompt + higher token budget
       const input = document.getElementById('chat-input');
       input.value = prompt;
       addMessage('user', prompt);
       chatHistory.push({ role: 'user', content: prompt });
       input.value = '';
 
-      const reply = await streamChat(chatHistory.slice(-20), 2000);
-      chatHistory.push({ role: 'assistant', content: reply });
+      const thinking = addMessage('ai', 'Thinking...');
+      try {
+        const response = await fetch('/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            system: getSystemPrompt(),
+            messages: chatHistory.slice(-20),
+            max_tokens: 2000
+          })
+        });
+        const data = await response.json();
+        const reply = data.text || ('Error: ' + (data.error || 'Unknown error'));
+        // Replace thinking bubble with real reply
+        const msgs = document.getElementById('chat-messages');
+        msgs.removeChild(msgs.lastChild);
+        addMessage('ai', reply);
+        chatHistory.push({ role: 'assistant', content: reply });
+      } catch (err) {
+        const msgs = document.getElementById('chat-messages');
+        msgs.removeChild(msgs.lastChild);
+        addMessage('ai', 'Network error: ' + err.message);
+      }
     }
 
     async function sendMessage() {
@@ -3719,9 +3650,26 @@ ${vagRows}`;
       addMessage('user', msg);
       chatHistory.push({ role: 'user', content: msg });
 
-      const reply = await streamChat(chatHistory.slice(-20));
-      chatHistory.push({ role: 'assistant', content: reply });
+      addMessage('ai', 'Thinking...');
+      try {
+        const response = await fetch('/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ system: getSystemPrompt(), messages: chatHistory.slice(-20) })
+        });
+        const data = await response.json();
+        const reply = data.text || ('Error: ' + (data.error || 'Unknown error'));
+        const msgs = document.getElementById('chat-messages');
+        msgs.removeChild(msgs.lastChild);
+        addMessage('ai', reply);
+        chatHistory.push({ role: 'assistant', content: reply });
+      } catch (err) {
+        const msgs = document.getElementById('chat-messages');
+        msgs.removeChild(msgs.lastChild);
+        addMessage('ai', 'Network error: ' + err.message);
+      }
     }
+
 
     window.addEventListener('DOMContentLoaded', () => {
       addWelcomeMessage();
