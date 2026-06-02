@@ -157,6 +157,121 @@ def chat():
 
     return jsonify({"error": "All models failed — check API keys"}), 500
 
+# ── API: Streaming Chat via SSE ───────────────────────────────
+@app.route("/api/chat/stream", methods=["POST"])
+def chat_stream():
+    import re, json as _json
+    from flask import Response, stream_with_context
+
+    body       = request.get_json(force=True)
+    sys_msg    = body.get("system", "You are a helpful SAP procurement analyst.")
+    messages   = body.get("messages", [])[-20:]
+    max_tokens = min(int(body.get("max_tokens", 2000)), 2000)
+
+    full_messages = [{"role": "system", "content": sys_msg}, *messages]
+
+    def _try_stream(url, headers, payload, timeout, label):
+        """Attempt a streaming request; yield (chunk_text) or return None on failure."""
+        try:
+            resp = http_requests.post(url, headers=headers, json=payload,
+                                      timeout=timeout, stream=True)
+            if resp.status_code != 200:
+                print(f"⚠ {label} failed: HTTP {resp.status_code}")
+                resp.close()
+                return None
+            return resp
+        except Exception as e:
+            print(f"⚠ {label} error: {e}")
+            return None
+
+    def generate():
+        in_think = False
+        stream_resp = None
+        model_used = "unknown"
+
+        # ── Try OpenRouter models ─────────────────────────────
+        if OPENROUTER_API_KEY:
+            for model in OPENROUTER_MODELS:
+                stream_resp = _try_stream(
+                    OPENROUTER_URL,
+                    headers={
+                        "Content-Type": "application/json",
+                        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+                        "HTTP-Referer": "https://sap-prpo.app",
+                        "X-Title": "SAP PR/PO Intelligence",
+                    },
+                    payload={"model": model, "max_tokens": max_tokens,
+                             "stream": True, "messages": full_messages},
+                    timeout=30,
+                    label=f"OpenRouter/{model}"
+                )
+                if stream_resp:
+                    model_used = model
+                    print(f"✓ Streaming from OpenRouter: {model}")
+                    break
+
+        # ── Fallback to Groq ──────────────────────────────────
+        if not stream_resp and GROQ_API_KEY:
+            for model in GROQ_MODELS:
+                stream_resp = _try_stream(
+                    GROQ_URL,
+                    headers={
+                        "Content-Type": "application/json",
+                        "Authorization": f"Bearer {GROQ_API_KEY}",
+                    },
+                    payload={"model": model, "max_tokens": max_tokens,
+                             "temperature": 0.4, "stream": True,
+                             "messages": full_messages},
+                    timeout=90,
+                    label=f"Groq/{model}"
+                )
+                if stream_resp:
+                    model_used = f"groq/{model}"
+                    print(f"✓ Streaming from Groq: {model}")
+                    break
+
+        if not stream_resp:
+            yield f"data: {_json.dumps({'error': 'All models failed — check API keys'})}\n\n"
+            return
+
+        # ── Parse SSE chunks from upstream ────────────────────
+        try:
+            for line in stream_resp.iter_lines(decode_unicode=True):
+                if not line or not line.startswith("data: "):
+                    continue
+                payload = line[6:].strip()
+                if payload == "[DONE]":
+                    break
+                try:
+                    chunk = _json.loads(payload)
+                    delta = chunk.get("choices", [{}])[0].get("delta", {})
+                    token = delta.get("content", "")
+                    if not token:
+                        continue
+
+                    # Filter out <think>...</think> blocks
+                    if "<think>" in token:
+                        in_think = True
+                        token = token.split("<think>")[0]
+                    if in_think:
+                        if "</think>" in token:
+                            in_think = False
+                            token = token.split("</think>", 1)[-1]
+                        else:
+                            continue
+                    if token:
+                        yield f"data: {_json.dumps({'token': token})}\n\n"
+                except (_json.JSONDecodeError, IndexError, KeyError):
+                    continue
+        finally:
+            stream_resp.close()
+
+        yield f"data: {_json.dumps({'done': True, 'model_used': model_used})}\n\n"
+
+    return Response(stream_with_context(generate()),
+                    mimetype="text/event-stream",
+                    headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
 # ── API: ML classify descriptions ────────────────────────────
 KEYWORD_MAP = [
     ("bearing","MECH"),("hydraulic pump","MECH"),("gear box","MECH"),("v belt","MECH"),
