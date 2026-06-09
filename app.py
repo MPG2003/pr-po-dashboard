@@ -125,8 +125,13 @@ FORMAT RULES
    - Model Assigned
    - Correct Category
    - Root Cause (if available)
+8. When presenting vague records, include:
+   - Rank
+   - Description
+   - Department/Source (if available)
+   - Root Cause (if available)
 
-8. For analytical questions, prefer tables over bullet lists.
+9. For analytical questions, prefer tables over bullet lists.
 """)
     messages   = body.get("messages", [])[-20:]
     max_tokens = min(int(body.get("max_tokens", 2000)), 2000)
